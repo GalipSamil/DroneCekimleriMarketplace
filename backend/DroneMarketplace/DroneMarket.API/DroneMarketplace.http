@@ -1,0 +1,6 @@
+@DroneMarketplace_HostAddress = http://localhost:5025
+
+GET {{DroneMarketplace_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
