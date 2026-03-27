@@ -82,6 +82,7 @@ export interface UpdateListingDto {
   dailyRate: number;
   projectRate: number;
   coverImageUrl?: string;
+  category: ServiceCategory;
   isActive: boolean;
   maxDistance: number;
   requiredEquipment?: string;

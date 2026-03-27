@@ -96,6 +96,7 @@ namespace DroneMarket.Application.Services
 
             listing.Title = listingDto.Title;
             listing.Description = listingDto.Description;
+            listing.Category = listingDto.Category;
             listing.HourlyRate = listingDto.HourlyRate;
             listing.DailyRate = listingDto.DailyRate;
             listing.ProjectRate = listingDto.ProjectRate;
