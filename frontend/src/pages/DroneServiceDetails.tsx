@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { MapPin, Clock, Camera, Settings, Calendar, ArrowLeft, CheckCircle, AlertCircle, Star, ShieldCheck } from 'lucide-react';
-import { listingAPI, bookingAPI } from '../services/api';
-import type { Listing, CreateBookingDto } from '../types';
+import { MapPin, Clock, Camera, Settings, Calendar, ArrowLeft, CheckCircle, AlertCircle, Star, ShieldCheck, UserCircle2 } from 'lucide-react';
+import { listingAPI, bookingAPI, reviewAPI } from '../services/api';
+import type { Listing, CreateBookingDto, Review } from '../types';
 import { BookingType, ServiceCategory } from '../types';
 import { useAuth } from '../context/AuthContext';
 
@@ -12,7 +12,9 @@ const DroneServiceDetails: React.FC = () => {
   const { isAuthenticated, userId } = useAuth();
 
   const [service, setService] = useState<Listing | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
 
   // Booking form state
@@ -30,6 +32,19 @@ const DroneServiceDetails: React.FC = () => {
       setLoading(true);
       const data = await listingAPI.getById(id!);
       setService(data);
+      
+      // Load reviews separately
+      if (data && data.pilotUserId) {
+          setReviewsLoading(true);
+          try {
+              const reviewsData = await reviewAPI.getByPilot(data.pilotUserId);
+              setReviews(reviewsData);
+          } catch (rErr) {
+              console.error('Error loading reviews:', rErr);
+          } finally {
+              setReviewsLoading(false);
+          }
+      }
     } catch (error) {
       console.error('Error loading service:', error);
     } finally {
@@ -105,7 +120,23 @@ const DroneServiceDetails: React.FC = () => {
       alert('Lütfen başlangıç ve bitiş tarihini/saatini seçin.');
       return;
     }
-    if (new Date(bookingForm.startDate) >= new Date(bookingForm.endDate)) {
+
+    const startDateObj = new Date(bookingForm.startDate);
+    const endDateObj = new Date(bookingForm.endDate);
+    const nowObj = new Date();
+
+    // If it's a daily/project booking (no time selected), only compare the date part
+    if (bookingForm.type !== BookingType.Hourly) {
+        nowObj.setHours(0, 0, 0, 0);
+        startDateObj.setHours(0, 0, 0, 0);
+    }
+
+    if (startDateObj < nowObj) {
+        alert('Başlangıç tarihi geçmiş bir zaman olamaz. Lütfen ileri bir tarih seçin.');
+        return;
+    }
+
+    if (startDateObj >= endDateObj) {
       alert('Bitiş tarihi/saati, başlangıçtan sonra olmalıdır.');
       return;
     }
@@ -222,11 +253,13 @@ const DroneServiceDetails: React.FC = () => {
             
             {/* Trust Signals */}
             <div className="flex flex-wrap items-center gap-4 mt-6">
-                <div className="flex items-center gap-1.5 text-yellow-500 bg-yellow-500/10 px-4 py-2 rounded-xl border border-yellow-500/20 backdrop-blur-md shadow-lg">
-                    <Star size={18} className="fill-yellow-500" />
-                    <span className="font-bold text-base mt-0.5">4.9</span>
-                    <span className="text-yellow-500/80 text-sm ml-1 mt-0.5 font-medium">(24 Değerlendirme)</span>
-                </div>
+                {service.averageRating > 0 && (
+                    <div className="flex items-center gap-1.5 text-yellow-500 bg-yellow-500/10 px-4 py-2 rounded-xl border border-yellow-500/20 backdrop-blur-md shadow-lg">
+                        <Star size={18} className="fill-yellow-500" />
+                        <span className="font-bold text-base mt-0.5">{service.averageRating.toFixed(1)}</span>
+                        <span className="text-yellow-500/80 text-sm ml-1 mt-0.5 font-medium">({service.reviewCount} Değerlendirme)</span>
+                    </div>
+                )}
                 <div className="flex items-center gap-2 text-emerald-400 bg-emerald-500/10 px-4 py-2 rounded-xl border border-emerald-500/20 backdrop-blur-md shadow-lg">
                     <ShieldCheck size={18} />
                     <span className="font-bold text-sm mt-0.5">100+ Başarılı Uçuş</span>
@@ -286,6 +319,57 @@ const DroneServiceDetails: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+            
+            {/* Reviews Section */}
+            <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 rounded-[2rem] p-8 md:p-10 shadow-2xl">
+              <h2 className="text-2xl md:text-3xl font-extrabold text-white mb-2 tracking-tight flex items-center gap-3">
+                  <Star size={28} className="text-yellow-500 fill-yellow-500" />
+                  Pilot Değerlendirmeleri
+              </h2>
+              <p className="text-slate-400 mb-8 border-b border-slate-700/50 pb-6 text-sm">
+                  {service.reviewCount > 0 ? `${service.pilotName} hakkında yapılan yorunlar.` : 'Bu pilot için henüz yorum yapılmamış.'}
+              </p>
+              
+              {reviewsLoading ? (
+                  <div className="flex justify-center py-6">
+                    <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                  </div>
+              ) : reviews.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {reviews.map(review => (
+                          <div key={review.id} className="bg-slate-800/40 border border-slate-700/60 rounded-2xl p-6 transition-colors hover:border-slate-600/60">
+                              <div className="flex items-center gap-4 mb-4">
+                                  {review.customerProfilePictureUrl ? (
+                                      <img src={review.customerProfilePictureUrl} alt={review.customerName} className="w-12 h-12 rounded-full object-cover" />
+                                  ) : (
+                                      <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center text-slate-300">
+                                          <UserCircle2 size={24} />
+                                      </div>
+                                  )}
+                                  <div>
+                                      <h4 className="font-bold text-slate-200">{review.customerName}</h4>
+                                      <div className="flex items-center gap-2 mt-1">
+                                          <div className="flex text-yellow-500">
+                                              {[...Array(5)].map((_, i) => (
+                                                  <Star key={i} size={14} className={i < review.rating ? 'fill-yellow-500' : 'text-slate-600'} />
+                                              ))}
+                                          </div>
+                                          <span className="text-xs text-slate-500">{new Date(review.createdAt).toLocaleDateString('tr-TR')}</span>
+                                      </div>
+                                  </div>
+                              </div>
+                              <p className="text-slate-300 text-sm leading-relaxed">{review.comment}</p>
+                          </div>
+                      ))}
+                  </div>
+              ) : (
+                  <div className="text-center py-12 bg-slate-800/20 rounded-2xl border border-dashed border-slate-700/50">
+                      <Star size={48} className="text-slate-600 mx-auto mb-4" />
+                      <h4 className="text-lg font-bold text-slate-300 mb-2">Henüz Değerlendirme Yok</h4>
+                      <p className="text-slate-500 max-w-sm mx-auto">İlk hizmeti tamamladıktan sonra müşterilerin yapacağı yorumlar burada görünecektir.</p>
+                  </div>
+              )}
             </div>
           </div>
 
@@ -357,8 +441,8 @@ const DroneServiceDetails: React.FC = () => {
       {/* Booking Modal */}
       {showBookingForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl">
-          <div className="bg-[#020617] border border-slate-800/80 rounded-[2.5rem] w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl shadow-blue-900/10 disable-scrollbars">
-            <div className="p-8 border-b border-slate-800/80 flex items-center justify-between sticky top-0 bg-[#020617]/90 z-20 backdrop-blur-md">
+          <div className="bg-[#020617] border border-slate-800/80 rounded-[2.5rem] w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl shadow-blue-900/10">
+            <div className="p-8 border-b border-slate-800/80 flex items-center justify-between flex-shrink-0 bg-[#020617] z-20 rounded-t-[2.5rem]">
               <h2 className="text-2xl font-extrabold text-white tracking-tight">Rezervasyon Oluştur</h2>
               <button
                 className="text-slate-500 hover:text-white bg-slate-800/50 hover:bg-slate-800 p-2 rounded-full transition-colors"
@@ -368,7 +452,7 @@ const DroneServiceDetails: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-8 space-y-8">
+            <div className="p-8 space-y-8 overflow-y-auto flex-1 disable-scrollbars">
               {/* Form Content */}
               <div>
                 <label className="block text-sm font-semibold text-slate-300 mb-3 ml-1">Rezervasyon Tipi</label>
@@ -465,7 +549,8 @@ const DroneServiceDetails: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-slate-900/60 p-6 mx-8 mb-8 rounded-2xl border border-slate-800 flex justify-between items-center shadow-inner">
+            <div className="flex-shrink-0 bg-[#020617] rounded-b-[2.5rem]">
+            <div className="bg-slate-900/60 p-4 mx-6 rounded-2xl border border-slate-800 flex justify-between items-center shadow-inner">
               <span className="text-slate-300 font-bold tracking-wide">Toplam Tutar</span>
               <span className="text-3xl font-extrabold text-white flex items-center gap-2">
                   {bookingForm.type === BookingType.Project && service.projectRate === 0
@@ -475,7 +560,7 @@ const DroneServiceDetails: React.FC = () => {
               </span>
             </div>
 
-            <div className="p-8 border-t border-slate-800/80 flex flex-col md:flex-row gap-4 bg-slate-900/40 rounded-b-[2.5rem]">
+            <div className="p-6 flex flex-col md:flex-row gap-3">
               <button
                 onClick={() => setShowBookingForm(false)}
                 className="w-full md:flex-1 py-4 font-bold bg-slate-800 hover:bg-slate-700 text-white rounded-xl transition-colors border border-slate-700"
@@ -489,6 +574,7 @@ const DroneServiceDetails: React.FC = () => {
               >
                 {bookingLoading ? 'İşleniyor...' : 'Rezervasyonu Onayla'}
               </button>
+            </div>
             </div>
           </div>
         </div>

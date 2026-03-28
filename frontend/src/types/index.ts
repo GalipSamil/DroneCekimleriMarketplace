@@ -59,6 +59,8 @@ export interface Listing {
   pilotName: string;
   pilotLocation?: string;
   pilotIsVerified: boolean;
+  averageRating: number;
+  reviewCount: number;
   createdAt: string;
 }
 
@@ -230,4 +232,37 @@ export interface CreateReviewDto {
   bookingId: string;
   rating: number;
   comment: string;
+}
+
+// Admin Types
+export interface AdminOverviewDto {
+  totalRevenue: number;
+  totalUsers: number;
+  activePilots: number;
+  newRequests: number;
+  recentActivities: RecentActivityDto[];
+}
+
+export interface RecentActivityDto {
+  text: string;
+  time: string;
+  createdAt: string;
+}
+
+export interface AdminUserDto {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+  verified: boolean;
+}
+
+export interface AdminBookingDto {
+  id: string;
+  customer: string;
+  pilot: string;
+  date: string;
+  amount: number;
+  status: number;
 }

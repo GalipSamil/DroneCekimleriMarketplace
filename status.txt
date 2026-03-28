@@ -1,0 +1,22 @@
+﻿ M backend/DroneMarketplace/DroneMarket.API/Program.cs
+ M backend/DroneMarketplace/DroneMarket.Application/DTOs/ListingDto.cs
+ M backend/DroneMarketplace/DroneMarket.Application/Services/ListingService.cs
+ M backend/DroneMarketplace/DroneMarket.Infrastructure/Data/SeedData.cs
+ M frontend/src/App.tsx
+ M frontend/src/components/layout/Header.tsx
+ M frontend/src/components/services/ServiceCard.tsx
+ M frontend/src/context/AuthContext.tsx
+ M frontend/src/hooks/useLogin.ts
+ M frontend/src/pages/BrowseDroneServices.tsx
+ M frontend/src/pages/CustomerDashboard.tsx
+ M frontend/src/pages/DroneServiceDetails.tsx
+ M frontend/src/pages/PilotDashboard.tsx
+ M frontend/src/services/api.ts
+ M frontend/src/types/index.ts
+?? backend/DroneMarketplace/DroneMarket.API/Controllers/AdminController.cs
+?? backend/DroneMarketplace/DroneMarket.Application/DTOs/AdminDashboardDtos.cs
+?? backend/DroneMarketplace/DroneMarket.Application/Interfaces/IAdminService.cs
+?? backend/DroneMarketplace/DroneMarket.Application/Services/AdminService.cs
+?? frontend/src/components/dashboard/CustomRequestModal.tsx
+?? frontend/src/pages/AdminDashboard.tsx
+?? status.txt

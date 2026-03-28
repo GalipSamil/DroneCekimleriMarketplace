@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { MapPin, ArrowRight, CheckCircle } from 'lucide-react';
+import { MapPin, ArrowRight, CheckCircle, Star } from 'lucide-react';
 import type { Listing } from '../../types';
 import { ServiceCategory } from '../../types';
 
@@ -97,12 +97,26 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service }) => {
                                 </span>
                             )}
                         </p>
-                        {service.pilotLocation && (
-                            <p className="text-xs text-slate-500 truncate flex items-center gap-1 mt-0.5">
-                                <MapPin size={10} className="shrink-0" />
-                                {service.pilotLocation}
-                            </p>
-                        )}
+                        <div className="flex items-center gap-2 mt-0.5">
+                            {service.averageRating > 0 ? (
+                                <span className="flex items-center gap-1 text-amber-400 text-xs font-semibold">
+                                    <Star size={11} fill="currentColor" />
+                                    {service.averageRating.toFixed(1)}
+                                    <span className="text-slate-500 font-normal">({service.reviewCount})</span>
+                                </span>
+                            ) : service.pilotLocation ? (
+                                <p className="text-xs text-slate-500 truncate flex items-center gap-1">
+                                    <MapPin size={10} className="shrink-0" />
+                                    {service.pilotLocation}
+                                </p>
+                            ) : null}
+                            {service.averageRating > 0 && service.pilotLocation && (
+                                <p className="text-xs text-slate-500 truncate flex items-center gap-1">
+                                    <MapPin size={10} className="shrink-0" />
+                                    {service.pilotLocation}
+                                </p>
+                            )}
+                        </div>
                     </div>
                 </div>
 

@@ -18,7 +18,10 @@ import type {
     ForgotPasswordDto,
     ResetPasswordDto,
     Review,
-    CreateReviewDto
+    CreateReviewDto,
+    AdminOverviewDto,
+    AdminUserDto,
+    AdminBookingDto
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5025/api';
@@ -259,6 +262,26 @@ export const reviewAPI = {
     }
 };
 
-
-
-
+// Admin API
+export const adminAPI = {
+    getOverview: async () => {
+        const response = await api.get<AdminOverviewDto>('/Admin/overview');
+        return response.data;
+    },
+    getUsers: async () => {
+        const response = await api.get<AdminUserDto[]>('/Admin/users');
+        return response.data;
+    },
+    getBookings: async () => {
+        const response = await api.get<AdminBookingDto[]>('/Admin/bookings');
+        return response.data;
+    },
+    approvePilot: async (userId: string) => {
+        const response = await api.put<{ message: string }>(`/Admin/approve-pilot/${userId}`);
+        return response.data;
+    },
+    deleteUser: async (userId: string) => {
+        const response = await api.delete<{ message: string }>(`/Admin/users/${userId}`);
+        return response.data;
+    }
+};

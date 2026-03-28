@@ -16,8 +16,14 @@ export const useLogin = () => {
             setError('');
             const response = await authAPI.login(data);
             if (response.userId && response.token) {
-                login(response.userId, response.isPilot, response.token);
-                navigate(response.isPilot ? '/pilot/dashboard' : '/customer/dashboard');
+                login(response.userId, response.isPilot, response.token, data.email);
+                
+                const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
+                if (adminEmail && data.email === adminEmail) {
+                    navigate('/admin');
+                } else {
+                    navigate(response.isPilot ? '/pilot/dashboard' : '/customer/dashboard');
+                }
             }
         } catch (err: any) {
             setError(err.response?.data?.message || 'Giriş başarısız. Bilgilerinizi kontrol edin.');

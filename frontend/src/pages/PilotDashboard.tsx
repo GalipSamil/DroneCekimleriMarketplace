@@ -26,6 +26,8 @@ export default function PilotDashboard() {
     const [listings, setListings] = useState<Listing[]>([]);
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [listingFilter, setListingFilter] = useState<'active' | 'inactive'>('active');
+    const [searchQuery, setSearchQuery] = useState('');
     const [editingListing, setEditingListing] = useState<Listing | null>(null);
     const [listingsLoading, setListingsLoading] = useState(true);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -195,16 +197,34 @@ export default function PilotDashboard() {
 
                 {/* Listings */}
                 <div className="space-y-5">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                            <LayoutDashboard size={20} className="text-blue-400" />
-                            Aktif Hizmetlerim
-                        </h2>
-                        <div className="relative hidden md:block">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                <LayoutDashboard size={20} className="text-blue-400" />
+                                Hizmetlerim
+                            </h2>
+                            <div className="flex bg-slate-800/60 p-1 rounded-xl border border-slate-700/50">
+                                <button
+                                    onClick={() => setListingFilter('active')}
+                                    className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${listingFilter === 'active' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                                >
+                                    Aktif ({listings.filter(l => l.isActive).length})
+                                </button>
+                                <button
+                                    onClick={() => setListingFilter('inactive')}
+                                    className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${listingFilter === 'inactive' ? 'bg-slate-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                                >
+                                    Pasif ({listings.filter(l => !l.isActive).length})
+                                </button>
+                            </div>
+                        </div>
+                        <div className="relative">
                             <input
                                 type="text"
                                 placeholder="Hizmetlerde ara..."
-                                className="bg-slate-900/50 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-sm text-slate-300 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all w-56"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="bg-slate-900/50 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-sm text-slate-300 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all w-full md:w-64"
                             />
                             <Search className="absolute left-3 top-2.5 text-slate-500" size={14} />
                         </div>
@@ -222,17 +242,20 @@ export default function PilotDashboard() {
                                     </div>
                                 </div>
                             ))
-                        ) : listings.length === 0 ? (
+                        ) : listings.filter(l => (listingFilter === 'active' ? l.isActive : !l.isActive) && l.title.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
                             <div className="col-span-full">
                                 <EmptyState
                                     icon={<Package size={22} />}
-                                    title="Henüz hizmet eklemediniz"
-                                    description="Müşterilere ulaşmak için ilk drone hizmetinizi oluşturun."
-                                    cta={{ label: 'İlk Hizmeti Ekle', to: '#' }}
+                                    title={listingFilter === 'active' ? "Aktif hizmetiniz bulunmuyor" : "Pasif hizmetiniz bulunmuyor"}
+                                    description={searchQuery ? "Aramanıza uygun sonuç bulunamadı." : (listingFilter === 'active' ? "Müşterilere ulaşmak için ilk drone hizmetinizi oluşturun." : "Şu anda pasife aldığınız bir hizmetiniz bulunmuyor.")}
+                                    cta={listingFilter === 'active' ? { label: 'İlk Hizmeti Ekle', to: '#' } : undefined}
                                 />
                             </div>
                         ) : (
-                            listings.map((listing) => (
+                            listings
+                                .filter(l => (listingFilter === 'active' ? l.isActive : !l.isActive))
+                                .filter(l => l.title.toLowerCase().includes(searchQuery.toLowerCase()))
+                                .map((listing) => (
                                 <div
                                     key={listing.id}
                                     className="bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-2xl group overflow-hidden hover:border-blue-500/30 hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-500/8 transition-all duration-200"

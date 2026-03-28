@@ -4,9 +4,10 @@ import { createContext, useContext, useState, type ReactNode } from 'react';
 interface AuthContextType {
     userId: string | null;
     isPilot: boolean;
+    isAdmin: boolean;
     token: string | null;
     isAuthenticated: boolean;
-    login: (userId: string, isPilot: boolean, token: string) => void;
+    login: (userId: string, isPilot: boolean, token: string, email?: string) => void;
     logout: () => void;
 }
 
@@ -19,25 +20,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [isPilot, setIsPilot] = useState<boolean>(
         localStorage.getItem('isPilot') === 'true'
     );
+    const [isAdmin, setIsAdmin] = useState<boolean>(
+        localStorage.getItem('isAdmin') === 'true'
+    );
     const [token, setToken] = useState<string | null>(
         localStorage.getItem('token')
     );
 
-    const login = (id: string, pilot: boolean, accessToken: string) => {
+    const login = (id: string, pilot: boolean, accessToken: string, email?: string) => {
+        const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
+        const adminStatus = adminEmail ? email === adminEmail : false;
+        
         setUserId(id);
         setIsPilot(pilot);
+        setIsAdmin(adminStatus);
         setToken(accessToken);
+        
         localStorage.setItem('userId', id);
         localStorage.setItem('isPilot', pilot.toString());
+        localStorage.setItem('isAdmin', adminStatus.toString());
         localStorage.setItem('token', accessToken);
     };
 
     const logout = () => {
         setUserId(null);
         setIsPilot(false);
+        setIsAdmin(false);
         setToken(null);
         localStorage.removeItem('userId');
         localStorage.removeItem('isPilot');
+        localStorage.removeItem('isAdmin');
         localStorage.removeItem('token');
     };
 
@@ -46,6 +58,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             value={{
                 userId,
                 isPilot,
+                isAdmin,
                 token,
                 isAuthenticated: !!userId,
                 login,

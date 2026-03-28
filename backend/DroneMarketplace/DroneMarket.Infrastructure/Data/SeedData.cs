@@ -2,6 +2,7 @@ using DroneMarket.Infrastructure.Persistence;
 using DroneMarketplace.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NetTopologySuite.Geometries;
 
@@ -14,6 +15,10 @@ namespace DroneMarket.Infrastructure.Data
             using var scope = serviceProvider.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+            var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+
+            var adminEmail = configuration["AdminSettings:Email"];
+            var adminPassword = configuration["AdminSettings:Password"];
 
             // Ensure database is created
             await context.Database.EnsureCreatedAsync();
@@ -21,6 +26,29 @@ namespace DroneMarket.Infrastructure.Data
             // Check if data already exists
             try
             {
+                if (!string.IsNullOrEmpty(adminEmail) && !string.IsNullOrEmpty(adminPassword))
+                {
+                    var adminExists = await userManager.FindByEmailAsync(adminEmail);
+                    if (adminExists == null)
+                    {
+                        var adminUser = new AppUser
+                        {
+                            UserName = adminEmail,
+                            Email = adminEmail,
+                            FirstName = "SkyMarket",
+                            LastName = "Admin",
+                            FullName = "SkyMarket Admin",
+                            EmailConfirmed = true
+                        };
+                        await userManager.CreateAsync(adminUser, adminPassword);
+                    }
+                    else
+                    {
+                        var token = await userManager.GeneratePasswordResetTokenAsync(adminExists);
+                        await userManager.ResetPasswordAsync(adminExists, token, adminPassword);
+                    }
+                }
+
                 if (await context.Listings.AnyAsync())
                 {
                     return; // Data already seeded

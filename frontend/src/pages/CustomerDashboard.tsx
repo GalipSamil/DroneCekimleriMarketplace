@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { bookingAPI, listingAPI, reviewAPI } from '../services/api';
 import type { Booking, Listing, BookingStatus } from '../types';
-import { LayoutDashboard, Calendar, Clock, CreditCard, ChevronRight, MapPin, Star, Search } from 'lucide-react';
+import { LayoutDashboard, Calendar, Clock, CreditCard, ChevronRight, MapPin, Star, Search, Send } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { StatCard, EmptyState, StatusBadge } from '../components/dashboard/DashboardComponents';
+import { CustomRequestModal } from '../components/dashboard/CustomRequestModal';
 
 export default function CustomerDashboard() {
     const { userId } = useAuth();
@@ -15,6 +16,7 @@ export default function CustomerDashboard() {
     const [reviewModal, setReviewModal] = useState<{ isOpen: boolean; bookingId: string | null }>({ isOpen: false, bookingId: null });
     const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' });
     const [reviewLoading, setReviewLoading] = useState(false);
+    const [isCustomRequestOpen, setIsCustomRequestOpen] = useState(false);
 
     const loadData = useCallback(async () => {
         try {
@@ -83,13 +85,22 @@ export default function CustomerDashboard() {
                         </h1>
                         <p className="text-slate-400 font-light">Randevularınızı takip edin ve yeni hizmetler keşfedin.</p>
                     </div>
-                    <Link
-                        to="/browse-services"
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm py-2.5 px-5 rounded-xl shadow-lg shadow-blue-500/20 transition-all hover:-translate-y-0.5 active:scale-95"
-                    >
-                        <Search size={15} />
-                        Hizmet Ara
-                    </Link>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setIsCustomRequestOpen(true)}
+                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-blue-500/50 text-white font-semibold text-sm py-2.5 px-5 rounded-xl shadow-lg transition-all hover:-translate-y-0.5 active:scale-95"
+                        >
+                            <Send size={15} className="text-blue-400" />
+                            Özel Talep
+                        </button>
+                        <Link
+                            to="/browse-services"
+                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm py-2.5 px-5 rounded-xl shadow-lg shadow-blue-500/20 transition-all hover:-translate-y-0.5 active:scale-95"
+                        >
+                            <Search size={15} />
+                            Hizmet Ara
+                        </Link>
+                    </div>
                 </div>
 
                 {/* Stats */}
@@ -226,7 +237,7 @@ export default function CustomerDashboard() {
                                         <div className="flex justify-between items-center">
                                             <span className="text-blue-400 font-bold text-sm">{listing.hourlyRate?.toLocaleString('tr-TR')}₺<span className="text-slate-500 text-xs font-normal">/saat</span></span>
                                             <div className="flex items-center gap-1 text-amber-400 text-xs">
-                                                <Star size={11} fill="currentColor" /><span>4.9</span>
+                                                <Star size={11} fill="currentColor" /><span>{listing.averageRating > 0 ? listing.averageRating.toFixed(1) : 'Yeni'}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -289,6 +300,12 @@ export default function CustomerDashboard() {
                     </div>
                 </div>
             )}
+
+            {/* Custom Request Modal */}
+            <CustomRequestModal 
+                isOpen={isCustomRequestOpen} 
+                onClose={() => setIsCustomRequestOpen(false)} 
+            />
         </div>
     );
 }

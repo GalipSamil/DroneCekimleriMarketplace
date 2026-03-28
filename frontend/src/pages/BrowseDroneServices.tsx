@@ -5,6 +5,7 @@ import { listingAPI } from '../services/api';
 import type { Listing } from '../types';
 import { ServiceCategory } from '../types';
 import { ServiceCard } from '../components/services/ServiceCard';
+import { CustomRequestModal } from '../components/dashboard/CustomRequestModal';
 
 const CATEGORIES = Object.values(ServiceCategory).filter((v): v is ServiceCategory => typeof v === 'number');
 
@@ -47,6 +48,7 @@ const BrowseDroneServices: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | undefined>();
   const [sortBy, setSortBy] = useState<SortKey>('price');
+  const [isCustomRequestOpen, setIsCustomRequestOpen] = useState(false);
 
   const loadServices = useCallback(async () => {
     try {
@@ -149,18 +151,35 @@ const BrowseDroneServices: React.FC = () => {
             {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         ) : services.length === 0 ? (
-          <div className="text-center py-24 bg-slate-900/40 rounded-[2.5rem] border border-dashed border-slate-800/80 backdrop-blur-sm">
-            <div className="w-16 h-16 bg-slate-800/50 rounded-full flex items-center justify-center mx-auto mb-5">
-              <Search className="w-8 h-8 text-slate-500" />
+          <div className="text-center py-24 bg-slate-900/40 rounded-[2.5rem] border border-dashed border-slate-800/80 backdrop-blur-sm shadow-2xl relative overflow-hidden group">
+            {/* Ambient glow in empty state */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-full blur-[80px] -z-10" />
+            
+            <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-blue-500/20 group-hover:scale-110 transition-transform duration-500">
+              <Search className="w-10 h-10 text-blue-400" />
             </div>
-            <h3 className="text-xl font-bold text-slate-200 mb-2">Sonuç Bulunamadı</h3>
-            <p className="text-slate-400 max-w-sm mx-auto mb-6">Aramanızla eşleşen hizmet yok. Filtreleri temizleyip tekrar deneyin.</p>
-            <button
-              onClick={clearFilters}
-              className="px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-blue-400 hover:text-blue-300 font-semibold transition-all text-sm"
-            >
-              Filtreleri Temizle
-            </button>
+            <h3 className="text-2xl md:text-3xl font-extrabold text-white mb-3">Aradığınız Kriterlerde Pilot Bulunamadı</h3>
+            <p className="text-slate-400 max-w-lg mx-auto mb-8 text-lg font-light leading-relaxed">
+              Ancak endişelenmeyin! Talebinizi bize iletin, <span className="text-blue-400 font-semibold">24 saat içinde</span> size uygun uzman bir pilotu biz ayarlayalım.
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                <button
+                onClick={() => setIsCustomRequestOpen(true)}
+                className="px-8 py-4 rounded-xl font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 transition-all hover:-translate-y-0.5 group/btn"
+                >
+                <div className="flex items-center gap-2">
+                    Özel Talep Oluştur
+                    <svg className="w-4 h-4 group-hover/btn:translate-x-1 font-bold transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                </div>
+                </button>
+                <button
+                onClick={clearFilters}
+                className="px-8 py-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-semibold transition-all hover:text-white"
+                >
+                Filtreleri Temizle
+                </button>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -170,6 +189,13 @@ const BrowseDroneServices: React.FC = () => {
           </div>
         )}
       </div>
+
+      <CustomRequestModal 
+        isOpen={isCustomRequestOpen} 
+        onClose={() => setIsCustomRequestOpen(false)} 
+        prefillCategory={selectedCategory}
+        prefillLocation={searchQuery}
+      />
     </div>
   );
 };

@@ -25,6 +25,10 @@ namespace DroneMarket.Application.DTOs
         public string? PilotLocation { get; set; }
         public bool PilotIsVerified { get; set; }
         
+        // Rating
+        public double AverageRating { get; set; }
+        public int ReviewCount { get; set; }
+        
         public DateTime CreatedAt { get; set; }
     }
 

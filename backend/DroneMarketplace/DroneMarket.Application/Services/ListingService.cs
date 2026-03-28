@@ -49,7 +49,11 @@ namespace DroneMarket.Application.Services
 
             if (listing == null) return null;
 
-            return MapToDto(listing);
+            var reviews = await _context.Reviews
+                .Where(r => r.Booking.Listing.PilotId == listing.PilotId)
+                .ToListAsync();
+
+            return MapToDto(listing, reviews.Count > 0 ? reviews.Average(r => r.Rating) : 0, reviews.Count);
         }
 
         public async Task<IEnumerable<ListingDto>> SearchListingsAsync(string query, ServiceCategory? category = null)
@@ -72,7 +76,18 @@ namespace DroneMarket.Application.Services
             }
 
             var listings = await listingsQuery.ToListAsync();
-            return listings.Select(MapToDto);
+
+            // Batch fetch reviews per pilot to avoid N+1
+            var pilotIds = listings.Select(l => l.PilotId).Distinct().ToList();
+            var allReviews = await _context.Reviews
+                .Where(r => pilotIds.Contains(r.Booking.Listing.PilotId))
+                .Select(r => new { r.Rating, r.Booking.Listing.PilotId })
+                .ToListAsync();
+
+            return listings.Select(l => {
+                var pr = allReviews.Where(r => r.PilotId == l.PilotId).ToList();
+                return MapToDto(l, pr.Count > 0 ? pr.Average(r => r.Rating) : 0, pr.Count);
+            });
         }
 
         public async Task<IEnumerable<ListingDto>> GetPilotListingsAsync(string userId)
@@ -86,7 +101,15 @@ namespace DroneMarket.Application.Services
                 .Where(s => s.PilotId == pilot.Id)
                 .ToListAsync();
 
-            return listings.Select(MapToDto);
+            var allReviews = await _context.Reviews
+                .Where(r => r.Booking.Listing.PilotId == pilot.Id)
+                .Select(r => new { r.Rating, r.Booking.Listing.PilotId })
+                .ToListAsync();
+
+            var avgRating = allReviews.Count > 0 ? allReviews.Average(r => r.Rating) : 0;
+            var reviewCount = allReviews.Count;
+
+            return listings.Select(l => MapToDto(l, avgRating, reviewCount));
         }
 
         public async Task<bool> UpdateListingAsync(Guid listingId, UpdateListingDto listingDto)
@@ -122,16 +145,16 @@ namespace DroneMarket.Application.Services
 
         public async Task<IEnumerable<ListingDto>> GetListingsByLocationAsync(double latitude, double longitude, double radiusKm)
         {
-             var listings = await _context.Listings
+            var listings = await _context.Listings
                 .Include(s => s.Pilot)
                 .ThenInclude(p => p.AppUser)
                 .Where(s => s.IsActive)
                 .ToListAsync();
 
-            return listings.Select(MapToDto);
+            return listings.Select(l => MapToDto(l, 0, 0));
         }
 
-        private static ListingDto MapToDto(Listing listing)
+        private static ListingDto MapToDto(Listing listing, double averageRating = 0, int reviewCount = 0)
         {
             return new ListingDto
             {
@@ -151,6 +174,8 @@ namespace DroneMarket.Application.Services
                 PilotId = listing.PilotId,
                 PilotName = listing.Pilot?.AppUser?.FullName ?? "Bilinmeyen Pilot",
                 PilotIsVerified = listing.Pilot?.IsVerified ?? false,
+                AverageRating = Math.Round(averageRating, 1),
+                ReviewCount = reviewCount,
                 CreatedAt = listing.CreatedAt
             };
         }

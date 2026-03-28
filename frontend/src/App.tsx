@@ -13,18 +13,24 @@ import CustomerDashboard from './pages/CustomerDashboard';
 import DroneServiceDetails from './pages/DroneServiceDetails';
 import About from './pages/About';
 import PublicPilotProfile from './pages/PublicPilotProfile';
+import AdminDashboard from './pages/AdminDashboard';
 import Footer from './components/layout/Footer';
 import ChatWidget from './components/chat/ChatWidget';
 import './App.css';
 
-function PrivateRoute({ children, requirePilot }: { children: React.JSX.Element; requirePilot?: boolean }) {
-  const { isAuthenticated, isPilot } = useAuth();
+function PrivateRoute({ children, requirePilot, requireAdmin }: { children: React.JSX.Element; requirePilot?: boolean; requireAdmin?: boolean }) {
+  const { isAuthenticated, isPilot, isAdmin } = useAuth();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" />;
   }
+  
+  if (requireAdmin && !isAdmin) {
+    return <Navigate to="/" />;
+  }
 
-  if (requirePilot !== undefined && isPilot !== requirePilot) {
+  // If we require pilot status strictly, check it. (Admin doesn't bypass this for pilot-only pages)
+  if (requirePilot !== undefined && isPilot !== requirePilot && !requireAdmin) {
     return <Navigate to="/" />;
   }
 
@@ -59,6 +65,22 @@ function AppRoutes() {
             element={
               <PrivateRoute requirePilot={false}>
                 <CustomerDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <PrivateRoute requireAdmin={true}>
+                <AdminDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/admin/dashboard"
+            element={
+              <PrivateRoute requireAdmin={true}>
+                <AdminDashboard />
               </PrivateRoute>
             }
           />

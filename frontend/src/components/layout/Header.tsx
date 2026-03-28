@@ -4,7 +4,7 @@ import { Menu, X, Rocket, User, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const Header: React.FC = () => {
-    const { isAuthenticated, isPilot, logout } = useAuth();
+    const { isAuthenticated, isPilot, isAdmin, logout } = useAuth();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isScrolled, setIsScrolled] = useState(false);
     const location = useLocation();
@@ -58,7 +58,7 @@ const Header: React.FC = () => {
                         {isAuthenticated ? (
                             <div className="flex items-center space-x-4">
                                 <Link
-                                    to={isPilot ? "/pilot/dashboard" : "/customer/dashboard"}
+                                    to={isAdmin ? "/admin" : (isPilot ? "/pilot/dashboard" : "/customer/dashboard")}
                                     className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 transition-all"
                                 >
                                     <User size={18} className="text-blue-400" />
@@ -104,7 +104,7 @@ const Header: React.FC = () => {
                         <hr className="border-slate-800" />
                         {isAuthenticated ? (
                             <>
-                                <MobileNavLink to={isPilot ? "/pilot/dashboard" : "/customer/dashboard"} onClick={() => setIsMenuOpen(false)}>
+                                <MobileNavLink to={isAdmin ? "/admin" : (isPilot ? "/pilot/dashboard" : "/customer/dashboard")} onClick={() => setIsMenuOpen(false)}>
                                     Panelim
                                 </MobileNavLink>
                                 <button
