@@ -1,20 +1,40 @@
-﻿using Microsoft.AspNetCore.Identity;
-using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.AspNetCore.Identity;
+using System;
 
 namespace DroneMarketplace.Domain.Entities
 {
     public class AppUser : IdentityUser 
     {
-        public string FirstName { get; set; }
-        public string LastName { get; set; }
-        public string FullName { get; set; }
+        public string FirstName { get; private set; }
+        public string LastName { get; private set; }
+        public string FullName { get; private set; }
+        public string? ProfilePictureUrl { get; private set; }
 
-        public string? ProfilePictureUrl { get; set; }
+        public Pilot? PilotProfile { get; private set; }
 
+        // Needs parameterless constructor for EF Core
+        protected AppUser() { }
 
-        // 1 e 1 ilişki : bir kullanıcının ya Pilot profili vardır ya da yoktur
-        // bu ilişkiyi kurmak için Pilot.cs dosyasına geri navigasyon ekleyelim
+        public static AppUser Create(string email, string fullName)
+        {
+            if (string.IsNullOrWhiteSpace(email)) throw new ArgumentException("Email cannot be empty.");
+            if (string.IsNullOrWhiteSpace(fullName)) throw new ArgumentException("FullName cannot be empty.");
 
-        public Pilot? PilotProfile { get; set; }
+            var names = fullName.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+            
+            return new AppUser
+            {
+                UserName = email,
+                Email = email,
+                FullName = fullName,
+                FirstName = names.Length > 0 ? names[0] : "",
+                LastName = names.Length > 1 ? names[1] : ""
+            };
+        }
+
+        public void UpdateProfilePicture(string url)
+        {
+            ProfilePictureUrl = url;
+        }
     }
 }

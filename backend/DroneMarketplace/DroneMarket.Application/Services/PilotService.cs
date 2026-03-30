@@ -19,32 +19,34 @@ namespace DroneMarket.Application.Services
         {
             var pilot = await _context.Pilots.FirstOrDefaultAsync(p => p.AppUserId == userId);
 
+            Point? location = null;
+            if (profileDto.Latitude != 0 || profileDto.Longitude != 0)
+            {
+                location = new Point(profileDto.Longitude, profileDto.Latitude) { SRID = 4326 };
+            }
+
             if (pilot == null)
             {
-                pilot = new Pilot
-                {
-                    AppUserId = userId,
-                    Bio = profileDto.Bio,
-                    EquipmentList = profileDto.EquipmentList,
-                    SHGMLicenseNumber = profileDto.SHGMLicenseNumber,
-                    Location = new Point(profileDto.Longitude, profileDto.Latitude) { SRID = 4326 }
-                };
+                // Use factory method — never raw constructor
+                pilot = Pilot.Create(userId);
+                pilot.UpdateProfile(profileDto.Bio, profileDto.EquipmentList, profileDto.SHGMLicenseNumber, location);
                 _context.Pilots.Add(pilot);
             }
             else
             {
-                pilot.Bio = profileDto.Bio;
-                pilot.EquipmentList = profileDto.EquipmentList;
-                pilot.SHGMLicenseNumber = profileDto.SHGMLicenseNumber;
-                pilot.Location = new Point(profileDto.Longitude, profileDto.Latitude) { SRID = 4326 };
+                // Domain method does property assignment and clears verification if license is removed
+                pilot.UpdateProfile(profileDto.Bio, profileDto.EquipmentList, profileDto.SHGMLicenseNumber, location);
             }
 
             await _context.SaveChangesAsync();
         }
 
-        public async Task<PilotProfileDto> GetProfileAsync(string userId)
+        public async Task<PilotProfileDto?> GetProfileAsync(string userId)
         {
-            var pilot = await _context.Pilots.FirstOrDefaultAsync(p => p.AppUserId == userId);
+            var pilot = await _context.Pilots
+                .Include(p => p.AppUser)
+                .FirstOrDefaultAsync(p => p.AppUserId == userId);
+
             if (pilot == null) return null;
 
             return new PilotProfileDto
@@ -52,19 +54,19 @@ namespace DroneMarket.Application.Services
                 Bio = pilot.Bio,
                 EquipmentList = pilot.EquipmentList,
                 SHGMLicenseNumber = pilot.SHGMLicenseNumber,
-                Latitude = pilot.Location.Y,
-                Longitude = pilot.Location.X
+                IsVerified = pilot.IsVerified,
+                Latitude = pilot.Location?.Y ?? 0,
+                Longitude = pilot.Location?.X ?? 0
             };
         }
 
         public async Task<IEnumerable<PilotProfileDto>> SearchPilotsAsync(double lat, double lon, double radiusKm)
         {
             var location = new Point(lon, lat) { SRID = 4326 };
+
             var pilots = await _context.Pilots
-                .Where(p => p.Location.Distance(location) <= radiusKm * 1000) // Approximate distance in meters if using projected CRS, but for 4326 it's degrees. 
-                // Note: For accurate distance in meters with PostGIS, we should cast to geography or use a projected CRS. 
-                // For simplicity here, assuming the DB is configured correctly or we accept degree approximation for now.
-                // Better approach for PostGIS: .Where(p => p.Location.IsWithinDistance(location, radiusInDegrees))
+                .Include(p => p.AppUser)
+                .Where(p => p.Location != null && p.Location.Distance(location) <= radiusKm * 1000)
                 .ToListAsync();
 
             return pilots.Select(p => new PilotProfileDto
@@ -72,9 +74,37 @@ namespace DroneMarket.Application.Services
                 Bio = p.Bio,
                 EquipmentList = p.EquipmentList,
                 SHGMLicenseNumber = p.SHGMLicenseNumber,
-                Latitude = p.Location.Y,
-                Longitude = p.Location.X
+                IsVerified = p.IsVerified,
+                Latitude = p.Location?.Y ?? 0,
+                Longitude = p.Location?.X ?? 0
             });
+        }
+
+        /// <summary>
+        /// Admin-only: verifies a pilot. Domain enforces SHGM license presence.
+        /// GlobalExceptionMiddleware handles InvalidOperationException if license is missing.
+        /// </summary>
+        public async Task VerifyPilotAsync(Guid pilotId)
+        {
+            var pilot = await _context.Pilots.FindAsync(pilotId);
+            if (pilot == null)
+                throw new KeyNotFoundException($"Pilot bulunamadı: {pilotId}");
+
+            pilot.Verify(); // Domain enforces: license must be present
+            await _context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Admin-only: revokes a pilot's verification.
+        /// </summary>
+        public async Task RevokeVerificationAsync(Guid pilotId, string reason)
+        {
+            var pilot = await _context.Pilots.FindAsync(pilotId);
+            if (pilot == null)
+                throw new KeyNotFoundException($"Pilot bulunamadı: {pilotId}");
+
+            pilot.RevokeVerification(reason);
+            await _context.SaveChangesAsync();
         }
     }
 }

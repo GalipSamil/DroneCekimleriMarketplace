@@ -18,5 +18,8 @@ namespace DroneMarket.Application.DTOs
 
         [Range(-180, 180, ErrorMessage = "Boylam -180 ile 180 arasında olmalıdır")]
         public double Longitude { get; set; }
+
+        // Read-only for clients — set by service layer from Domain entity
+        public bool IsVerified { get; set; }
     }
 }

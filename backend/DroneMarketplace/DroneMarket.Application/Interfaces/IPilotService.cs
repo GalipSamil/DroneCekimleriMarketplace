@@ -5,7 +5,9 @@ namespace DroneMarket.Application.Interfaces
     public interface IPilotService
     {
         Task CreateOrUpdateProfileAsync(string userId, PilotProfileDto profileDto);
-        Task<PilotProfileDto> GetProfileAsync(string userId);
+        Task<PilotProfileDto?> GetProfileAsync(string userId);
         Task<IEnumerable<PilotProfileDto>> SearchPilotsAsync(double lat, double lon, double radiusKm);
+        Task VerifyPilotAsync(Guid pilotId);
+        Task RevokeVerificationAsync(Guid pilotId, string reason);
     }
 }

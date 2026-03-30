@@ -1,30 +1,82 @@
-﻿using NetTopologySuite.Geometries;
-
-
+using NetTopologySuite.Geometries;
 
 namespace DroneMarketplace.Domain.Entities
 {
     public class Pilot : BaseEntity
     {
-        // 1. Foreign Key: AppUser'ın Id'si (IdentityUser varsayılan olarak string Id kullan
-        public string AppUserId { get; set; }
+        public string AppUserId { get; private set; }
+        public AppUser? AppUser { get; private set; }
 
+        public string? SHGMLicenseNumber { get; private set; }
+        public string? Bio { get; private set; }
+        public string? EquipmentList { get; private set; }
 
-        public AppUser? AppUser { get; set; }
+        public bool IsVerified { get; private set; } = false;
 
+        public Point? Location { get; private set; }
 
-        // pilot özellikleri
-        public string SHGMLicenseNumber { get; set; }
-        public string Bio { get; set; }
+        public ICollection<Listing> Listings { get; private set; } = new List<Listing>();
+        public ICollection<Drone> Drones { get; private set; } = new List<Drone>();
+        public ICollection<PilotAvailability> Availabilities { get; private set; } = new List<PilotAvailability>();
 
-        public string EquipmentList { get; set; }
-        public bool IsVerified { get; set; } = false;   
+        // For EF Core
+        protected Pilot() { }
 
-        public Point Location { get; set; }
+        /// <summary>
+        /// Factory method: creates a new unverified pilot profile attached to an existing AppUser.
+        /// Verification occurs only after admin review via Verify().
+        /// </summary>
+        public static Pilot Create(string appUserId)
+        {
+            if (string.IsNullOrWhiteSpace(appUserId))
+                throw new ArgumentException("Pilot için geçerli bir kullanıcı kimliği gereklidir.");
 
+            return new Pilot
+            {
+                Id = Guid.NewGuid(),
+                AppUserId = appUserId,
+                IsVerified = false
+            };
+        }
 
-        public ICollection<Listing> Listings { get; set; } = new List<Listing>();
-        public ICollection<Drone> Drones { get; set; } = new List<Drone>();
-        public ICollection<PilotAvailability> Availabilities { get; set; } = new List<PilotAvailability>();
+        /// <summary>
+        /// Updates the pilot's editable profile fields.
+        /// A pilot can only update their own profile (enforced at service layer via userId).
+        /// </summary>
+        public void UpdateProfile(string? bio, string? equipmentList, string? shgmLicenseNumber, Point? location)
+        {
+            Bio = bio;
+            EquipmentList = equipmentList;
+            SHGMLicenseNumber = shgmLicenseNumber;
+            Location = location;
+
+            // If a pilot clears their license number, they lose verification
+            if (string.IsNullOrWhiteSpace(shgmLicenseNumber) && IsVerified)
+            {
+                IsVerified = false;
+            }
+        }
+
+        /// <summary>
+        /// Admin-only: Marks the pilot as verified. Requires a valid SHGM license number.
+        /// </summary>
+        public void Verify()
+        {
+            if (string.IsNullOrWhiteSpace(SHGMLicenseNumber))
+                throw new InvalidOperationException("Pilot onaylanabilmesi için geçerli bir SHGM lisans numarası girilmiş olmalıdır.");
+
+            IsVerified = true;
+        }
+
+        /// <summary>
+        /// Admin-only: Revokes pilot verification (e.g. license expired or suspended).
+        /// </summary>
+        public void RevokeVerification(string reason)
+        {
+            if (string.IsNullOrWhiteSpace(reason))
+                throw new ArgumentException("Doğrulama iptal sebebi boş bırakılamaz.");
+
+            IsVerified = false;
+        }
     }
 }

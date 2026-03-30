@@ -1,6 +1,6 @@
 using DroneMarket.Application.DTOs;
 using DroneMarket.Application.Interfaces;
-using DroneMarket.Application.Common.Models; // Added
+using DroneMarket.Application.Common.Models;
 using DroneMarketplace.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,19 +20,16 @@ namespace DroneMarketplace.Controllers
         }
 
         [HttpPost]
-        // [Authorize] 
+        [Authorize(Roles = "Pilot,Admin")] 
         public async Task<IActionResult> CreateListing([FromBody] CreateListingDto listingDto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId) && Request.Headers.ContainsKey("X-User-Id"))
-            {
-                userId = Request.Headers["X-User-Id"];
-            }
-            userId ??= "test-pilot-user";
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized(new ApiResponse<string>("Oturum açmanız gerekiyor."));
             
-            // Note: GlobalExceptionMiddleware will catch exceptions
+            // Note: GlobalExceptionMiddleware handles InvalidOperationException and UnauthorizedAccessException logic
             var listingId = await _listingService.CreateListingAsync(userId, listingDto);
-            return Ok(new ApiResponse<Guid>(listingId, "Listing created successfully."));
+            return Ok(new ApiResponse<Guid>(listingId, "İlan başarıyla oluşturuldu."));
         }
 
         [HttpGet("{id}")]
@@ -40,7 +37,7 @@ namespace DroneMarketplace.Controllers
         {
             var listing = await _listingService.GetListingAsync(id);
             if (listing == null) 
-                return NotFound(new ApiResponse<string>("Listing not found."));
+                return NotFound(new ApiResponse<string>("İlan bulunamadı."));
                 
             return Ok(new ApiResponse<ListingDto>(listing));
         }
@@ -67,23 +64,33 @@ namespace DroneMarketplace.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize]
+        [Authorize(Roles = "Pilot,Admin")]
         public async Task<IActionResult> UpdateListing(Guid id, [FromBody] UpdateListingDto listingDto)
         {
-            var result = await _listingService.UpdateListingAsync(id, listingDto);
-            if (!result) return NotFound(new ApiResponse<string>("Listing not found."));
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new ApiResponse<string>("Oturum açmanız gerekiyor."));
+
+            var isAdmin = User.IsInRole("Admin") || User.Claims.Any(c => c.Type == ClaimTypes.Role && c.Value == "Admin");
+
+            var result = await _listingService.UpdateListingAsync(id, userId, isAdmin, listingDto);
+            if (!result) return NotFound(new ApiResponse<string>("İlan bulunamadı."));
             
-            return Ok(new ApiResponse<bool>(true, "Listing updated successfully."));
+            return Ok(new ApiResponse<bool>(true, "İlan başarıyla güncellendi."));
         }
 
         [HttpDelete("{id}")]
-        [Authorize]
+        [Authorize(Roles = "Pilot,Admin")]
         public async Task<IActionResult> DeleteListing(Guid id)
         {
-            var result = await _listingService.DeleteListingAsync(id);
-            if (!result) return NotFound(new ApiResponse<string>("Listing not found."));
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new ApiResponse<string>("Oturum açmanız gerekiyor."));
 
-            return Ok(new ApiResponse<bool>(true, "Listing deleted successfully."));
+            var isAdmin = User.IsInRole("Admin") || User.Claims.Any(c => c.Type == ClaimTypes.Role && c.Value == "Admin");
+
+            var result = await _listingService.DeleteListingAsync(id, userId, isAdmin);
+            if (!result) return NotFound(new ApiResponse<string>("İlan bulunamadı."));
+
+            return Ok(new ApiResponse<bool>(true, "İlan başarıyla silindi."));
         }
     }
 }

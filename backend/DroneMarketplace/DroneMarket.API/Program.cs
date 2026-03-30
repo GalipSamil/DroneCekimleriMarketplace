@@ -100,6 +100,7 @@ builder.Services.AddAuthentication(options =>
 });
 
 // Authentication & User Services
+builder.Services.AddScoped<IJwtProvider, JwtProvider>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IPilotService, PilotService>();

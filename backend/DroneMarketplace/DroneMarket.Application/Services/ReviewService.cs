@@ -1,11 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using DroneMarketplace.Domain.Entities;
 using DroneMarket.Application.Interfaces;
 using DroneMarket.Application.DTOs;
+using System.Security.Cryptography.X509Certificates;
 
 namespace DroneMarket.Application.Services
 {
@@ -20,42 +17,30 @@ namespace DroneMarket.Application.Services
 
         public async Task<ReviewDto> CreateReviewAsync(string customerUserId, CreateReviewDto dto)
         {
-            // İlgili rezervasyonu bul
+            // Business rule: Check if booking exists
             var booking = await _context.Bookings
                 .Include(b => b.Customer)
                 .Include(b => b.Listing)
                 .FirstOrDefaultAsync(b => b.Id == dto.BookingId);
 
             if (booking == null)
-            {
-                throw new Exception("Sipariş bulunamadı.");
-            }
+                throw new KeyNotFoundException("Sipariş bulunamadı.");
 
+            // Business rule: Authorization check
             if (booking.CustomerId != customerUserId)
-            {
                 throw new UnauthorizedAccessException("Bu siparişi değerlendirme yetkiniz yok.");
-            }
 
+            // Business rule: Status valid states check
             if (booking.Status != BookingStatus.Completed)
-            {
-                throw new Exception("Sadece tamamlanmış siparişler için değerlendirme yapılabilir.");
-            }
+                throw new InvalidOperationException("Sadece tamamlanmış siparişler için değerlendirme yapılabilir.");
 
-            // Zaten yorum yapılmış mı kontrol et
+            // Business rule: Unique constraint check
             var existingReview = await _context.Reviews.AnyAsync(r => r.BookingId == dto.BookingId);
             if (existingReview)
-            {
-                throw new Exception("Bu sipariş için zaten bir değerlendirme yapılmış.");
-            }
+                throw new InvalidOperationException("Bu sipariş için zaten bir değerlendirme yapılmış.");
 
-            var review = new Review
-            {
-                Id = Guid.NewGuid(),
-                BookingId = dto.BookingId,
-                Rating = dto.Rating,
-                Comment = dto.Comment ?? string.Empty,
-                CreatedAt = DateTime.UtcNow
-            };
+            // Domain creates the logic
+            var review = Review.Create(dto.BookingId, dto.Rating, dto.Comment);
 
             await _context.Reviews.AddAsync(review);
             await _context.SaveChangesAsync();
@@ -76,10 +61,10 @@ namespace DroneMarket.Application.Services
         {
             var reviews = await _context.Reviews
                 .Include(r => r.Booking)
-                .ThenInclude(b => b.Customer)
+                    .ThenInclude(b => b.Customer)
                 .Include(r => r.Booking)
-                .ThenInclude(b => b.Listing)
-                .Where(r => r.Booking.Listing.PilotId == pilotId && !r.Booking.Listing.IsDeleted) // IsDeleted check on listing
+                    .ThenInclude(b => b.Listing)
+                .Where(r => r.Booking.Listing.PilotId == pilotId && !r.Booking.Listing.IsDeleted)
                 .OrderByDescending(r => r.CreatedAt)
                 .Select(r => new ReviewDto
                 {
@@ -100,7 +85,7 @@ namespace DroneMarket.Application.Services
         {
             var r = await _context.Reviews
                 .Include(r => r.Booking)
-                .ThenInclude(b => b.Customer)
+                    .ThenInclude(b => b.Customer)
                 .FirstOrDefaultAsync(r => r.BookingId == bookingId);
 
             if (r == null) return null;

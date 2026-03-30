@@ -17,22 +17,21 @@ namespace DroneMarket.Application.Services
         public async Task<Guid> CreateListingAsync(string userId, CreateListingDto listingDto)
         {
             var pilot = await _context.Pilots.FirstOrDefaultAsync(p => p.AppUserId == userId);
-            if (pilot == null) throw new Exception($"User '{userId}' is not a pilot. Pilot count in DB: {await _context.Pilots.CountAsync()}");
+            if (pilot == null) throw new UnauthorizedAccessException("Sadece pilot olarak onaylanmış kullanıcılar ilan açabilir.");
 
-            var listing = new Listing
-            {
-                PilotId = pilot.Id,
-                Title = listingDto.Title,
-                Description = listingDto.Description,
-                Category = listingDto.Category,
-                HourlyRate = listingDto.HourlyRate,
-                DailyRate = listingDto.DailyRate,
-                ProjectRate = listingDto.ProjectRate,
-                CoverImageUrl = listingDto.CoverImageUrl,
-                MaxDistance = listingDto.MaxDistance,
-                RequiredEquipment = listingDto.RequiredEquipment,
-                DeliverableFormat = listingDto.DeliverableFormat
-            };
+            var listing = Listing.Create(
+                pilotId: pilot.Id,
+                title: listingDto.Title,
+                description: listingDto.Description,
+                category: listingDto.Category,
+                hourlyRate: listingDto.HourlyRate,
+                dailyRate: listingDto.DailyRate,
+                projectRate: listingDto.ProjectRate,
+                coverImageUrl: listingDto.CoverImageUrl,
+                maxDistance: listingDto.MaxDistance,
+                requiredEquipment: listingDto.RequiredEquipment,
+                deliverableFormat: listingDto.DeliverableFormat
+            );
 
             _context.Listings.Add(listing);
             await _context.SaveChangesAsync();
@@ -112,31 +111,52 @@ namespace DroneMarket.Application.Services
             return listings.Select(l => MapToDto(l, avgRating, reviewCount));
         }
 
-        public async Task<bool> UpdateListingAsync(Guid listingId, UpdateListingDto listingDto)
+        public async Task<bool> UpdateListingAsync(Guid listingId, string userId, bool isAdmin, UpdateListingDto listingDto)
         {
-            var listing = await _context.Listings.FindAsync(listingId);
+            var listing = await _context.Listings
+                .Include(l => l.Pilot)
+                .FirstOrDefaultAsync(l => l.Id == listingId);
+                
             if (listing == null) return false;
 
-            listing.Title = listingDto.Title;
-            listing.Description = listingDto.Description;
-            listing.Category = listingDto.Category;
-            listing.HourlyRate = listingDto.HourlyRate;
-            listing.DailyRate = listingDto.DailyRate;
-            listing.ProjectRate = listingDto.ProjectRate;
-            listing.CoverImageUrl = listingDto.CoverImageUrl;
-            listing.IsActive = listingDto.IsActive;
-            listing.MaxDistance = listingDto.MaxDistance;
-            listing.RequiredEquipment = listingDto.RequiredEquipment;
-            listing.DeliverableFormat = listingDto.DeliverableFormat;
+            // Security check: Must own the listing or be an Admin
+            if (listing.Pilot.AppUserId != userId && !isAdmin)
+                throw new UnauthorizedAccessException("Bu ilanı güncelleme yetkiniz yok.");
+
+            // Domain method handles property assignment
+            listing.UpdateDetails(
+                title: listingDto.Title,
+                description: listingDto.Description,
+                category: listingDto.Category,
+                hourlyRate: listingDto.HourlyRate,
+                dailyRate: listingDto.DailyRate,
+                projectRate: listingDto.ProjectRate,
+                coverImageUrl: listingDto.CoverImageUrl,
+                maxDistance: listingDto.MaxDistance,
+                requiredEquipment: listingDto.RequiredEquipment,
+                deliverableFormat: listingDto.DeliverableFormat
+            );
+
+            if (listingDto.IsActive)
+                listing.Activate();
+            else
+                listing.Deactivate();
 
             await _context.SaveChangesAsync();
             return true;
         }
 
-        public async Task<bool> DeleteListingAsync(Guid listingId)
+        public async Task<bool> DeleteListingAsync(Guid listingId, string userId, bool isAdmin)
         {
-            var listing = await _context.Listings.FindAsync(listingId);
+            var listing = await _context.Listings
+                .Include(l => l.Pilot)
+                .FirstOrDefaultAsync(l => l.Id == listingId);
+
             if (listing == null) return false;
+
+            // Security check: Must own the listing or be an Admin
+            if (listing.Pilot.AppUserId != userId && !isAdmin)
+                throw new UnauthorizedAccessException("Bu ilanı silme yetkiniz yok.");
 
             _context.Listings.Remove(listing);
             await _context.SaveChangesAsync();

@@ -102,7 +102,7 @@ namespace DroneMarket.Application.Services
             var pilot = await _context.Pilots.FirstOrDefaultAsync(p => p.AppUserId == userId);
             if (pilot == null) return false;
 
-            pilot.IsVerified = true;
+            pilot.Verify();
             await _context.SaveChangesAsync();
             return true;
         }

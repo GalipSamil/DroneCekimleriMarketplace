@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using DroneMarket.Application.Services;
 using DroneMarket.Application.DTOs;
+using DroneMarket.Application.Interfaces;
+using DroneMarket.Application.Common.Models;
 
 namespace DroneMarket.API.Controllers
 {
@@ -18,47 +20,37 @@ namespace DroneMarket.API.Controllers
         }
 
         [HttpPost]
-        [Authorize]
-        public async Task<ActionResult<ReviewDto>> CreateReview(CreateReviewDto dto)
+        [Authorize(Roles = "Customer,Admin")]
+        public async Task<ActionResult<ApiResponse<ReviewDto>>> CreateReview(CreateReviewDto dto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId))
             {
-                return Unauthorized();
+                return Unauthorized(new ApiResponse<string>("Oturum açmanız gerekiyor."));
             }
 
-            try
-            {
-                var result = await _reviewService.CreateReviewAsync(userId, dto);
-                return Ok(result);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return Forbid(ex.Message);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+            // Exceptions (InvalidOperationException, UnauthorizedAccessException) are handled by GlobalExceptionMiddleware
+            var result = await _reviewService.CreateReviewAsync(userId, dto);
+            return Ok(new ApiResponse<ReviewDto>(result, "Değerlendirme başarıyla kaydedildi."));
         }
 
         [HttpGet("pilot/{pilotId}")]
-        public async Task<ActionResult<IEnumerable<ReviewDto>>> GetReviewsByPilot(Guid pilotId)
+        public async Task<ActionResult<ApiResponse<IEnumerable<ReviewDto>>>> GetReviewsByPilot(Guid pilotId)
         {
             var reviews = await _reviewService.GetReviewsByPilotAsync(pilotId);
-            return Ok(reviews);
+            return Ok(new ApiResponse<IEnumerable<ReviewDto>>(reviews));
         }
 
         [HttpGet("booking/{bookingId}")]
         [Authorize]
-        public async Task<ActionResult<ReviewDto>> GetReviewByBooking(Guid bookingId)
+        public async Task<ActionResult<ApiResponse<ReviewDto>>> GetReviewByBooking(Guid bookingId)
         {
             var review = await _reviewService.GetReviewByBookingAsync(bookingId);
             if (review == null)
             {
-                return NotFound();
+                return NotFound(new ApiResponse<string>("Bu sipariş için değerlendirme bulunamadı."));
             }
-            return Ok(review);
+            return Ok(new ApiResponse<ReviewDto>(review));
         }
     }
 }

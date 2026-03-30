@@ -9,8 +9,8 @@ namespace DroneMarket.Application.Interfaces
         Task<ListingDto> GetListingAsync(Guid listingId);
         Task<IEnumerable<ListingDto>> SearchListingsAsync(string query, ServiceCategory? category = null);
         Task<IEnumerable<ListingDto>> GetPilotListingsAsync(string userId);
-        Task<bool> UpdateListingAsync(Guid listingId, UpdateListingDto listingDto);
-        Task<bool> DeleteListingAsync(Guid listingId);
+        Task<bool> UpdateListingAsync(Guid listingId, string userId, bool isAdmin, UpdateListingDto listingDto);
+        Task<bool> DeleteListingAsync(Guid listingId, string userId, bool isAdmin);
         Task<IEnumerable<ListingDto>> GetListingsByLocationAsync(double latitude, double longitude, double radiusKm);
     }
 }

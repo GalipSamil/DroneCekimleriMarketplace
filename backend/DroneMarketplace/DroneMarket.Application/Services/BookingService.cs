@@ -20,44 +20,23 @@ namespace DroneMarket.Application.Services
                 .FirstOrDefaultAsync(s => s.Id == bookingDto.ListingId);
 
             if (listing == null)
-            {
                 throw new KeyNotFoundException($"Listing with ID {bookingDto.ListingId} not found.");
-            }
 
-            var booking = new Booking
-            {
-                Id = Guid.NewGuid(),
-                ListingId = bookingDto.ListingId,
-                CustomerId = customerId,
-                StartDate = bookingDto.StartDate,
-                EndDate = bookingDto.EndDate,
-                Type = bookingDto.Type,
-                Location = bookingDto.Location ?? "",
-                Latitude = bookingDto.Latitude,
-                Longitude = bookingDto.Longitude,
-                CustomerNotes = bookingDto.CustomerNotes ?? "",
-                PilotNotes = "",
-                Status = BookingStatus.Pending,
-                BookingDate = DateTime.UtcNow,
-                Hours = bookingDto.Hours,
-                Days = bookingDto.Days
-            };
-
-            // Calculate price securely on server side
-            var duration = bookingDto.EndDate - bookingDto.StartDate;
-            
-            if (bookingDto.Type == BookingType.Hourly)
-            {
-                booking.TotalPrice = listing.HourlyRate * bookingDto.Hours;
-            }
-            else if (bookingDto.Type == BookingType.Daily)
-            {
-                booking.TotalPrice = listing.DailyRate * bookingDto.Days;
-            }
-            else // Project
-            {
-                booking.TotalPrice = listing.ProjectRate;
-            }
+            // Domain handles calculation and validation natively
+            var booking = Booking.Create(
+                listingId: bookingDto.ListingId,
+                listing: listing,
+                customerId: customerId,
+                startDate: bookingDto.StartDate,
+                endDate: bookingDto.EndDate,
+                type: bookingDto.Type,
+                location: bookingDto.Location ?? "",
+                latitude: bookingDto.Latitude,
+                longitude: bookingDto.Longitude,
+                hours: bookingDto.Hours,
+                days: bookingDto.Days,
+                customerNotes: bookingDto.CustomerNotes
+            );
 
             _context.Bookings.Add(booking);
             await _context.SaveChangesAsync();
@@ -76,9 +55,7 @@ namespace DroneMarket.Application.Services
                 .FirstOrDefaultAsync(b => b.Id == bookingId);
 
             if (booking == null)
-            {
                 throw new KeyNotFoundException($"Booking with ID {bookingId} not found.");
-            }
 
             return MapToDto(booking);
         }
@@ -98,7 +75,6 @@ namespace DroneMarket.Application.Services
 
         public async Task<IEnumerable<BookingDto>> GetPilotBookingsAsync(string pilotUserId)
         {
-            // We need to find bookings where the listing belongs to the pilot
             var bookings = await _context.Bookings
                 .Include(b => b.Listing)
                 .Include(b => b.Customer)
@@ -115,19 +91,34 @@ namespace DroneMarket.Application.Services
             var booking = await _context.Bookings.FindAsync(bookingId);
             if (booking == null) return false;
 
-            if (!string.IsNullOrEmpty(notes))
+            // Direct mapping logic replaced by strict Domain behavior
+            switch (status)
             {
-                if (status == BookingStatus.InProgress && booking.Status == BookingStatus.Delivered)
-                {
-                    booking.CustomerNotes = string.IsNullOrEmpty(booking.CustomerNotes) ? $"[İade Sebebi]: {notes}" : booking.CustomerNotes + $"\n[İade Sebebi]: {notes}";
-                }
-                else
-                {
-                    booking.PilotNotes = string.IsNullOrEmpty(booking.PilotNotes) ? $"[Pilot Mesajı]: {notes}" : booking.PilotNotes + $"\n[Pilot Mesajı]: {notes}";
-                }
+                case BookingStatus.Accepted:
+                    booking.Accept(notes);
+                    break;
+                case BookingStatus.Rejected:
+                    booking.Reject(notes ?? "Sistem tarafından reddedildi.");
+                    break;
+                case BookingStatus.InProgress:
+                    if (booking.Status == BookingStatus.Delivered)
+                        booking.RequestRevision(notes ?? "Düzeltme gerekli.");
+                    else
+                        booking.Start(notes);
+                    break;
+                case BookingStatus.Delivered:
+                    booking.Deliver(notes);
+                    break;
+                case BookingStatus.Completed:
+                    booking.Complete();
+                    break;
+                case BookingStatus.Cancelled:
+                    booking.CancelByCustomer(notes ?? "Kullanıcı tarafından iptal edildi.");
+                    break;
+                default:
+                    booking.ForceStatusChange(status, notes);
+                    break;
             }
-
-            booking.Status = status;
 
             await _context.SaveChangesAsync();
             return true;
@@ -137,16 +128,10 @@ namespace DroneMarket.Application.Services
         {
             var booking = await _context.Bookings.FindAsync(bookingId);
             if (booking == null) return false;
-
-            if (booking.Status == BookingStatus.Completed || booking.Status == BookingStatus.Cancelled)
-            {
-                return false;
-            }
-
-            booking.Status = BookingStatus.Cancelled;
-            booking.CustomerNotes = (booking.CustomerNotes ?? "") + $" [Cancelled: {reason}]";
-
+            
+            booking.CancelByCustomer(reason);
             await _context.SaveChangesAsync();
+            
             return true;
         }
 
@@ -155,14 +140,15 @@ namespace DroneMarket.Application.Services
             var listing = await _context.Listings.FindAsync(listingId);
             if (listing == null) throw new KeyNotFoundException("Listing not found");
 
-            var duration = endDate - startDate;
-            
+            // Ideally this sits in a PricingDomainService, but we duplicate pure logic here for preview endpoint efficiency.
+            var mockedHours = (decimal)(endDate - startDate).TotalHours;
+            var days = (int)Math.Ceiling((endDate - startDate).TotalDays);
+
             switch (type)
             {
                 case BookingType.Hourly:
-                    return listing.HourlyRate * (decimal)duration.TotalHours;
+                    return listing.HourlyRate * mockedHours;
                 case BookingType.Daily:
-                    var days = (int)Math.Ceiling(duration.TotalDays);
                     return listing.DailyRate * (days <= 0 ? 1 : days);
                 case BookingType.Project:
                     return listing.ProjectRate;
