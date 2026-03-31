@@ -1,23 +1,44 @@
 using DroneMarket.Application.DTOs;
+using DroneMarket.Application.Common.Security;
 using DroneMarket.Application.Interfaces;
+using DroneMarket.Application.Interfaces.Persistence;
 using DroneMarketplace.Domain.Entities;
+using DroneMarketplace.Domain.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace DroneMarket.Application.Services
 {
     public class ListingService : IListingService
     {
+        private readonly IListingRepository _listingRepository;
+        private readonly IPilotRepository _pilotRepository;
+        private readonly ICurrentUserService _currentUserService;
         private readonly IApplicationDbContext _context;
+        private readonly IUnitOfWork _unitOfWork;
 
-        public ListingService(IApplicationDbContext context)
+        public ListingService(
+            IListingRepository listingRepository,
+            IPilotRepository pilotRepository,
+            ICurrentUserService currentUserService,
+            IApplicationDbContext context,
+            IUnitOfWork unitOfWork)
         {
+            _listingRepository = listingRepository;
+            _pilotRepository = pilotRepository;
+            _currentUserService = currentUserService;
             _context = context;
+            _unitOfWork = unitOfWork;
         }
 
-        public async Task<Guid> CreateListingAsync(string userId, CreateListingDto listingDto)
+        public async Task<Guid> CreateListingAsync(CreateListingDto listingDto)
         {
-            var pilot = await _context.Pilots.FirstOrDefaultAsync(p => p.AppUserId == userId);
-            if (pilot == null) throw new UnauthorizedAccessException("Sadece pilot olarak onaylanmış kullanıcılar ilan açabilir.");
+            var actor = _currentUserService.GetRequiredActor();
+            if (!actor.IsPilot)
+                throw new ForbiddenAccessException("İlan oluşturma işlemi yalnızca pilotlar için yetkilidir.");
+
+            var pilot = await _pilotRepository.GetByUserIdAsync(actor.UserId);
+            if (pilot == null)
+                throw new InvalidOperationException("İlan oluşturmak için önce bir pilot profiline sahip olmalısınız.");
 
             var listing = Listing.Create(
                 pilotId: pilot.Id,
@@ -33,97 +54,65 @@ namespace DroneMarket.Application.Services
                 deliverableFormat: listingDto.DeliverableFormat
             );
 
-            _context.Listings.Add(listing);
-            await _context.SaveChangesAsync();
+            _listingRepository.Add(listing);
+            await _unitOfWork.SaveChangesAsync();
 
             return listing.Id;
         }
 
-        public async Task<ListingDto> GetListingAsync(Guid listingId)
+        public async Task<ListingDto?> GetListingAsync(Guid listingId)
         {
-            var listing = await _context.Listings
-                .Include(s => s.Pilot)
-                .ThenInclude(p => p.AppUser)
-                .FirstOrDefaultAsync(s => s.Id == listingId);
+            var listing = await _listingRepository.GetByIdAsync(listingId);
 
-            if (listing == null) return null;
+            if (listing == null || !listing.IsActive)
+            {
+                return null;
+            }
 
-            var reviews = await _context.Reviews
-                .Where(r => r.Booking.Listing.PilotId == listing.PilotId)
-                .ToListAsync();
+            var (averageRating, reviewCount) = await GetReviewStatsAsync(listing.PilotId);
+            return MapToDto(listing, averageRating, reviewCount);
+        }
 
-            return MapToDto(listing, reviews.Count > 0 ? reviews.Average(r => r.Rating) : 0, reviews.Count);
+        public async Task<ListingDto?> GetManagedListingAsync(Guid listingId)
+        {
+            var listing = await _listingRepository.GetByIdAsync(listingId);
+            if (listing == null)
+            {
+                return null;
+            }
+
+            ListingAccessGuard.EnsureCanManage(listing, _currentUserService.GetRequiredActor());
+
+            var (averageRating, reviewCount) = await GetReviewStatsAsync(listing.PilotId);
+            return MapToDto(listing, averageRating, reviewCount);
         }
 
         public async Task<IEnumerable<ListingDto>> SearchListingsAsync(string query, ServiceCategory? category = null)
         {
-            var listingsQuery = _context.Listings
-                .Include(s => s.Pilot)
-                .ThenInclude(p => p.AppUser)
-                .Where(s => s.IsActive);
-
-            if (!string.IsNullOrEmpty(query))
-            {
-                listingsQuery = listingsQuery.Where(s => 
-                    s.Title.Contains(query) || 
-                    s.Description.Contains(query));
-            }
-
-            if (category.HasValue)
-            {
-                listingsQuery = listingsQuery.Where(s => s.Category == category.Value);
-            }
-
-            var listings = await listingsQuery.ToListAsync();
-
-            // Batch fetch reviews per pilot to avoid N+1
-            var pilotIds = listings.Select(l => l.PilotId).Distinct().ToList();
-            var allReviews = await _context.Reviews
-                .Where(r => pilotIds.Contains(r.Booking.Listing.PilotId))
-                .Select(r => new { r.Rating, r.Booking.Listing.PilotId })
-                .ToListAsync();
-
-            return listings.Select(l => {
-                var pr = allReviews.Where(r => r.PilotId == l.PilotId).ToList();
-                return MapToDto(l, pr.Count > 0 ? pr.Average(r => r.Rating) : 0, pr.Count);
-            });
+            var listings = await _listingRepository.SearchActiveAsync(query, category);
+            return await MapListingsAsync(listings);
         }
 
-        public async Task<IEnumerable<ListingDto>> GetPilotListingsAsync(string userId)
+        public async Task<IEnumerable<ListingDto>> GetPilotListingsAsync(string pilotUserId)
         {
-            var pilot = await _context.Pilots.FirstOrDefaultAsync(p => p.AppUserId == userId);
-            if (pilot == null) return new List<ListingDto>();
-
-            var listings = await _context.Listings
-                .Include(s => s.Pilot)
-                .ThenInclude(p => p.AppUser)
-                .Where(s => s.PilotId == pilot.Id)
-                .ToListAsync();
-
-            var allReviews = await _context.Reviews
-                .Where(r => r.Booking.Listing.PilotId == pilot.Id)
-                .Select(r => new { r.Rating, r.Booking.Listing.PilotId })
-                .ToListAsync();
-
-            var avgRating = allReviews.Count > 0 ? allReviews.Average(r => r.Rating) : 0;
-            var reviewCount = allReviews.Count;
-
-            return listings.Select(l => MapToDto(l, avgRating, reviewCount));
+            var listings = await _listingRepository.GetActiveByPilotUserIdAsync(pilotUserId);
+            return await MapListingsAsync(listings);
         }
 
-        public async Task<bool> UpdateListingAsync(Guid listingId, string userId, bool isAdmin, UpdateListingDto listingDto)
+        public async Task<IEnumerable<ListingDto>> GetMyListingsAsync()
         {
-            var listing = await _context.Listings
-                .Include(l => l.Pilot)
-                .FirstOrDefaultAsync(l => l.Id == listingId);
-                
+            var actor = _currentUserService.GetRequiredActor();
+            var listings = await _listingRepository.GetByPilotUserIdAsync(actor.UserId);
+            return await MapListingsAsync(listings);
+        }
+
+        public async Task<bool> UpdateListingAsync(Guid listingId, UpdateListingDto listingDto)
+        {
+            var listing = await _listingRepository.GetByIdAsync(listingId);
             if (listing == null) return false;
 
-            // Security check: Must own the listing or be an Admin
-            if (listing.Pilot.AppUserId != userId && !isAdmin)
-                throw new UnauthorizedAccessException("Bu ilanı güncelleme yetkiniz yok.");
+            ListingAccessGuard.EnsureCanManage(listing, _currentUserService.GetRequiredActor());
 
-            // Domain method handles property assignment
             listing.UpdateDetails(
                 title: listingDto.Title,
                 description: listingDto.Description,
@@ -137,41 +126,103 @@ namespace DroneMarket.Application.Services
                 deliverableFormat: listingDto.DeliverableFormat
             );
 
-            if (listingDto.IsActive)
-                listing.Activate();
-            else
-                listing.Deactivate();
+            ApplyActivationState(listing, listingDto.IsActive);
 
-            await _context.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync();
             return true;
         }
 
-        public async Task<bool> DeleteListingAsync(Guid listingId, string userId, bool isAdmin)
+        public async Task<bool> DeleteListingAsync(Guid listingId)
         {
-            var listing = await _context.Listings
-                .Include(l => l.Pilot)
-                .FirstOrDefaultAsync(l => l.Id == listingId);
-
+            var listing = await _listingRepository.GetByIdAsync(listingId);
             if (listing == null) return false;
 
-            // Security check: Must own the listing or be an Admin
-            if (listing.Pilot.AppUserId != userId && !isAdmin)
-                throw new UnauthorizedAccessException("Bu ilanı silme yetkiniz yok.");
+            ListingAccessGuard.EnsureCanManage(listing, _currentUserService.GetRequiredActor());
 
-            _context.Listings.Remove(listing);
-            await _context.SaveChangesAsync();
+            _listingRepository.Remove(listing);
+            await _unitOfWork.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> SetListingActivationAsync(Guid listingId, bool isActive)
+        {
+            var listing = await _listingRepository.GetByIdAsync(listingId);
+            if (listing == null) return false;
+
+            ListingAccessGuard.EnsureCanManage(listing, _currentUserService.GetRequiredActor());
+            ApplyActivationState(listing, isActive);
+
+            await _unitOfWork.SaveChangesAsync();
             return true;
         }
 
         public async Task<IEnumerable<ListingDto>> GetListingsByLocationAsync(double latitude, double longitude, double radiusKm)
         {
-            var listings = await _context.Listings
-                .Include(s => s.Pilot)
-                .ThenInclude(p => p.AppUser)
-                .Where(s => s.IsActive)
+            var listings = await _listingRepository.GetActiveByLocationAsync(latitude, longitude, radiusKm);
+            return await MapListingsAsync(listings);
+        }
+
+        private async Task<IEnumerable<ListingDto>> MapListingsAsync(IEnumerable<Listing> listings)
+        {
+            var listingList = listings.ToList();
+            if (listingList.Count == 0)
+            {
+                return Array.Empty<ListingDto>();
+            }
+
+            var ratingMap = await GetReviewStatsByPilotIdsAsync(listingList.Select(l => l.PilotId));
+            return listingList.Select(listing =>
+            {
+                var stats = ratingMap.TryGetValue(listing.PilotId, out var value)
+                    ? value
+                    : (Average: 0d, Count: 0);
+
+                return MapToDto(listing, stats.Average, stats.Count);
+            });
+        }
+
+        private async Task<(double Average, int Count)> GetReviewStatsAsync(Guid pilotId)
+        {
+            var ratings = await _context.Reviews
+                .Where(r => r.Booking.Listing.PilotId == pilotId)
+                .Select(r => r.Rating)
                 .ToListAsync();
 
-            return listings.Select(l => MapToDto(l, 0, 0));
+            return ratings.Count == 0
+                ? (0, 0)
+                : (ratings.Average(), ratings.Count);
+        }
+
+        private async Task<Dictionary<Guid, (double Average, int Count)>> GetReviewStatsByPilotIdsAsync(IEnumerable<Guid> pilotIds)
+        {
+            var distinctPilotIds = pilotIds.Distinct().ToList();
+            if (distinctPilotIds.Count == 0)
+            {
+                return new Dictionary<Guid, (double Average, int Count)>();
+            }
+
+            var ratings = await _context.Reviews
+                .Where(r => distinctPilotIds.Contains(r.Booking.Listing.PilotId))
+                .Select(r => new { r.Rating, r.Booking.Listing.PilotId })
+                .ToListAsync();
+
+            return ratings
+                .GroupBy(r => r.PilotId)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (Average: group.Average(x => x.Rating), Count: group.Count()));
+        }
+
+        private static void ApplyActivationState(Listing listing, bool isActive)
+        {
+            if (isActive)
+            {
+                listing.Activate();
+            }
+            else
+            {
+                listing.Deactivate();
+            }
         }
 
         private static ListingDto MapToDto(Listing listing, double averageRating = 0, int reviewCount = 0)

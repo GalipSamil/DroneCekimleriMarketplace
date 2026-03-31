@@ -3,7 +3,6 @@ using DroneMarket.Application.Interfaces;
 using DroneMarketplace.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace DroneMarketplace.Controllers
 {
@@ -19,21 +18,11 @@ namespace DroneMarketplace.Controllers
         }
 
         [HttpPost]
-        [Authorize]
+        [Authorize(Policy = "PilotOnly")]
         public async Task<IActionResult> Create([FromBody] CreateDroneDto droneDto)
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-
-            try
-            {
-                var droneId = await _droneService.AddDroneAsync(userId, droneDto);
-                return CreatedAtAction(nameof(GetById), new { id = droneId }, new { id = droneId });
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return BadRequest(ex.Message); // "Pilot profile not found"
-            }
+            var droneId = await _droneService.AddDroneAsync(droneDto);
+            return CreatedAtAction(nameof(GetById), new { id = droneId }, new { id = droneId });
         }
 
         [HttpGet("{id}")]
@@ -65,30 +54,27 @@ namespace DroneMarketplace.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize]
+        [Authorize(Policy = "PilotOrAdmin")]
         public async Task<IActionResult> Update(Guid id, [FromBody] UpdateDroneDto droneDto)
         {
-            // TODO: Validate ownership
             var result = await _droneService.UpdateDroneAsync(id, droneDto);
             if (!result) return NotFound();
             return Ok();
         }
 
         [HttpDelete("{id}")]
-        [Authorize]
+        [Authorize(Policy = "PilotOrAdmin")]
         public async Task<IActionResult> Delete(Guid id)
         {
-            // TODO: Validate ownership
             var result = await _droneService.DeleteDroneAsync(id);
             if (!result) return NotFound();
             return Ok();
         }
 
         [HttpPut("{id}/availability")]
-        [Authorize]
+        [Authorize(Policy = "PilotOrAdmin")]
         public async Task<IActionResult> SetAvailability(Guid id, [FromBody] AvailabilityDto dto)
         {
-             // TODO: Validate ownership
             var result = await _droneService.SetDroneAvailabilityAsync(id, dto.IsAvailable);
             if (!result) return NotFound();
             return Ok();

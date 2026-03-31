@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { authAPI } from '../services/api';
+import { authAPI, extractApiErrorMessage } from '../services/api';
 import type { ForgotPasswordDto, ResetPasswordDto } from '../types';
 
 export const useForgotPassword = (onSuccessReset: () => void) => {
@@ -16,8 +16,8 @@ export const useForgotPassword = (onSuccessReset: () => void) => {
             setEmail(data.email);
             setStep('reset');
             setMessage({ type: 'success', text: 'Sıfırlama kodu email adresinize gönderildi.' });
-        } catch (err: any) {
-            setMessage({ type: 'error', text: err.response?.data?.message || 'Bir hata oluştu.' });
+        } catch (err: unknown) {
+            setMessage({ type: 'error', text: extractApiErrorMessage(err, 'Bir hata oluştu.') });
         } finally {
             setLoading(false);
         }
@@ -30,8 +30,8 @@ export const useForgotPassword = (onSuccessReset: () => void) => {
             await authAPI.resetPassword({ ...data, email });
             setMessage({ type: 'success', text: 'Şifreniz başarıyla sıfırlandı. Giriş sayfasına yönlendiriliyorsunuz...' });
             setTimeout(onSuccessReset, 3000);
-        } catch (err: any) {
-            setMessage({ type: 'error', text: err.response?.data?.message || 'Bir hata oluştu.' });
+        } catch (err: unknown) {
+            setMessage({ type: 'error', text: extractApiErrorMessage(err, 'Bir hata oluştu.') });
         } finally {
             setLoading(false);
         }

@@ -4,12 +4,13 @@ using DroneMarketplace.Domain.Entities;
 
 
 using DroneMarket.Application.Interfaces;
+using DroneMarket.Application.Interfaces.Persistence;
 
 namespace DroneMarket.Infrastructure.Persistence
 {
-    public class ApplicationDbContext : IdentityDbContext<AppUser>, IApplicationDbContext
+    public class ApplicationDbContext : IdentityDbContext<AppUser>, IApplicationDbContext, IUnitOfWork
     {
-        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
+        public ApplicationDbContext(DbContextOptions options) : base(options)
         {
         }
 

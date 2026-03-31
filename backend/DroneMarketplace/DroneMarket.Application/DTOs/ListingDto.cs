@@ -103,4 +103,9 @@ namespace DroneMarket.Application.DTOs
         [StringLength(500, ErrorMessage = "Teslimat formatı en fazla 500 karakter olabilir")]
         public string? DeliverableFormat { get; set; }
     }
+
+    public class SetListingActivationDto
+    {
+        public bool IsActive { get; set; }
+    }
 }

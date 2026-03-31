@@ -1,18 +1,26 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace DroneMarketplace.Domain.Entities
+﻿namespace DroneMarketplace.Domain.Entities
 {
-    public class BaseEntity
+    public abstract class BaseEntity
     {
-        public Guid Id { get; set; } = Guid.NewGuid();
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public Guid Id { get; private set; } = Guid.NewGuid();
+        public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
+        public DateTime? UpdatedAt { get; private set; }
+        public bool IsDeleted { get; private set; }
 
-        public DateTime? UpdatedAt { get; set; }
+        protected void Touch()
+        {
+            UpdatedAt = DateTime.UtcNow;
+        }
 
-        public bool IsDeleted { get; set; } = false;
+        public void SoftDelete()
+        {
+            if (IsDeleted)
+            {
+                return;
+            }
+
+            IsDeleted = true;
+            Touch();
+        }
     }
 }

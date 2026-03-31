@@ -1,0 +1,64 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUILD_CONFIGURATION: Release
+  SOLUTION_PATH: backend/DroneMarketplace/DroneMarketplace.sln
+  DOMAIN_TEST_PROJECT: backend/DroneMarketplace/Domain.UnitTests/Domain.UnitTests.csproj
+  INTEGRATION_TEST_PROJECT: backend/DroneMarketplace/DroneMarket.API.IntegrationTests/DroneMarket.API.IntegrationTests.csproj
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: |
+            backend/DroneMarketplace/**/*.csproj
+            backend/DroneMarketplace/**/*.sln
+
+      - name: Restore
+        run: dotnet restore "$SOLUTION_PATH"
+
+      - name: Build
+        run: dotnet build "$SOLUTION_PATH" --configuration "$BUILD_CONFIGURATION" --no-restore -m:1
+
+      - name: Domain Unit Tests
+        run: dotnet test "$DOMAIN_TEST_PROJECT" --configuration "$BUILD_CONFIGURATION" --no-build --verbosity minimal
+
+      - name: API Integration Tests
+        run: dotnet test "$INTEGRATION_TEST_PROJECT" --configuration "$BUILD_CONFIGURATION" --no-build --verbosity minimal

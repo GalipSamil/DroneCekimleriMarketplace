@@ -1,50 +1,101 @@
-using Microsoft.EntityFrameworkCore;
 using DroneMarketplace.Domain.Entities;
+using DroneMarket.Application.Common.Security;
 using DroneMarket.Application.Interfaces;
 using DroneMarket.Application.DTOs;
-using System.Security.Cryptography.X509Certificates;
+using DroneMarket.Application.Interfaces.Persistence;
 
 namespace DroneMarket.Application.Services
 {
     public class ReviewService : IReviewService
     {
-        private readonly IApplicationDbContext _context;
+        private readonly IBookingRepository _bookingRepository;
+        private readonly IReviewRepository _reviewRepository;
+        private readonly IUnitOfWork _unitOfWork;
 
-        public ReviewService(IApplicationDbContext context)
+        public ReviewService(
+            IBookingRepository bookingRepository,
+            IReviewRepository reviewRepository,
+            IUnitOfWork unitOfWork)
         {
-            _context = context;
+            _bookingRepository = bookingRepository;
+            _reviewRepository = reviewRepository;
+            _unitOfWork = unitOfWork;
         }
 
-        public async Task<ReviewDto> CreateReviewAsync(string customerUserId, CreateReviewDto dto)
+        public async Task<ReviewDto> CreateReviewAsync(ActorContext actor, CreateReviewDto dto)
         {
-            // Business rule: Check if booking exists
-            var booking = await _context.Bookings
-                .Include(b => b.Customer)
-                .Include(b => b.Listing)
-                .FirstOrDefaultAsync(b => b.Id == dto.BookingId);
+            var booking = await _bookingRepository.GetByIdWithAccessGraphAsync(dto.BookingId);
 
             if (booking == null)
                 throw new KeyNotFoundException("Sipariş bulunamadı.");
 
-            // Business rule: Authorization check
-            if (booking.CustomerId != customerUserId)
-                throw new UnauthorizedAccessException("Bu siparişi değerlendirme yetkiniz yok.");
+            ReviewAccessGuard.EnsureCanCreate(booking, actor);
 
-            // Business rule: Status valid states check
             if (booking.Status != BookingStatus.Completed)
                 throw new InvalidOperationException("Sadece tamamlanmış siparişler için değerlendirme yapılabilir.");
 
-            // Business rule: Unique constraint check
-            var existingReview = await _context.Reviews.AnyAsync(r => r.BookingId == dto.BookingId);
+            var existingReview = await _reviewRepository.ExistsByBookingIdAsync(dto.BookingId);
             if (existingReview)
                 throw new InvalidOperationException("Bu sipariş için zaten bir değerlendirme yapılmış.");
 
-            // Domain creates the logic
             var review = Review.Create(dto.BookingId, dto.Rating, dto.Comment);
+            _reviewRepository.Add(review);
+            await _unitOfWork.SaveChangesAsync();
 
-            await _context.Reviews.AddAsync(review);
-            await _context.SaveChangesAsync();
+            return MapToDto(review, booking);
+        }
 
+        public async Task<ReviewDto?> UpdateReviewAsync(ActorContext actor, Guid reviewId, UpdateReviewDto dto)
+        {
+            var review = await _reviewRepository.GetByIdWithAccessGraphAsync(reviewId);
+            if (review == null)
+            {
+                return null;
+            }
+
+            ReviewAccessGuard.EnsureCanUpdate(review.Booking, actor);
+            review.Update(dto.Rating, dto.Comment);
+            await _unitOfWork.SaveChangesAsync();
+
+            return MapToDto(review, review.Booking);
+        }
+
+        public async Task<bool> DeleteReviewAsync(ActorContext actor, Guid reviewId)
+        {
+            var review = await _reviewRepository.GetByIdWithAccessGraphAsync(reviewId);
+            if (review == null)
+            {
+                return false;
+            }
+
+            ReviewAccessGuard.EnsureCanDelete(review.Booking, actor);
+            _reviewRepository.Remove(review);
+            await _unitOfWork.SaveChangesAsync();
+
+            return true;
+        }
+
+        public async Task<IEnumerable<ReviewDto>> GetReviewsByPilotAsync(Guid pilotId)
+        {
+            var reviews = await _reviewRepository.GetByPilotIdAsync(pilotId);
+            return reviews.Select(r => MapToDto(r, r.Booking));
+        }
+
+        public async Task<ReviewDto?> GetReviewByBookingAsync(ActorContext actor, Guid bookingId)
+        {
+            var review = await _reviewRepository.GetByBookingIdWithAccessGraphAsync(bookingId);
+
+            if (review == null)
+            {
+                return null;
+            }
+
+            BookingAccessGuard.EnsureCanRead(review.Booking, actor);
+            return MapToDto(review, review.Booking);
+        }
+
+        private static ReviewDto MapToDto(Review review, Booking booking)
+        {
             return new ReviewDto
             {
                 Id = review.Id,
@@ -54,51 +105,6 @@ namespace DroneMarket.Application.Services
                 CreatedAt = review.CreatedAt,
                 CustomerName = booking.Customer.FullName,
                 CustomerProfilePictureUrl = booking.Customer.ProfilePictureUrl
-            };
-        }
-
-        public async Task<IEnumerable<ReviewDto>> GetReviewsByPilotAsync(Guid pilotId)
-        {
-            var reviews = await _context.Reviews
-                .Include(r => r.Booking)
-                    .ThenInclude(b => b.Customer)
-                .Include(r => r.Booking)
-                    .ThenInclude(b => b.Listing)
-                .Where(r => r.Booking.Listing.PilotId == pilotId && !r.Booking.Listing.IsDeleted)
-                .OrderByDescending(r => r.CreatedAt)
-                .Select(r => new ReviewDto
-                {
-                    Id = r.Id,
-                    BookingId = r.BookingId,
-                    Rating = r.Rating,
-                    Comment = r.Comment,
-                    CreatedAt = r.CreatedAt,
-                    CustomerName = r.Booking.Customer.FullName,
-                    CustomerProfilePictureUrl = r.Booking.Customer.ProfilePictureUrl
-                })
-                .ToListAsync();
-
-            return reviews;
-        }
-
-        public async Task<ReviewDto?> GetReviewByBookingAsync(Guid bookingId)
-        {
-            var r = await _context.Reviews
-                .Include(r => r.Booking)
-                    .ThenInclude(b => b.Customer)
-                .FirstOrDefaultAsync(r => r.BookingId == bookingId);
-
-            if (r == null) return null;
-
-            return new ReviewDto
-            {
-                Id = r.Id,
-                BookingId = r.BookingId,
-                Rating = r.Rating,
-                Comment = r.Comment,
-                CreatedAt = r.CreatedAt,
-                CustomerName = r.Booking.Customer.FullName,
-                CustomerProfilePictureUrl = r.Booking.Customer.ProfilePictureUrl
             };
         }
     }

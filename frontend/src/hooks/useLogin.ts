@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authAPI } from '../services/api';
+import { authAPI, extractApiErrorMessage } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import type { LoginDto } from '../types';
 
@@ -15,18 +15,23 @@ export const useLogin = () => {
             setLoading(true);
             setError('');
             const response = await authAPI.login(data);
-            if (response.userId && response.token) {
-                login(response.userId, response.isPilot, response.token, data.email);
+            const payload = response.data;
+
+            if (payload?.userId && payload.token) {
+                login(payload.userId, payload.isPilot, payload.token, data.email);
                 
                 const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
                 if (adminEmail && data.email === adminEmail) {
                     navigate('/admin');
                 } else {
-                    navigate(response.isPilot ? '/pilot/dashboard' : '/customer/dashboard');
+                    navigate(payload.isPilot ? '/pilot/dashboard' : '/customer/dashboard');
                 }
+                return;
             }
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Giriş başarısız. Bilgilerinizi kontrol edin.');
+
+            setError(response.message || 'Giriş başarısız. Bilgilerinizi kontrol edin.');
+        } catch (err: unknown) {
+            setError(extractApiErrorMessage(err, 'Giriş başarısız. Bilgilerinizi kontrol edin.'));
         } finally {
             setLoading(false);
         }

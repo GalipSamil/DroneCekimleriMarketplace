@@ -3,10 +3,10 @@ namespace DroneMarketplace.Domain.Entities
     public class Listing : BaseEntity
     {
         public Guid PilotId { get; private set; }
-        public Pilot Pilot { get; private set; }
+        public Pilot Pilot { get; private set; } = default!;
 
-        public string Title { get; private set; }
-        public string Description { get; private set; }
+        public string Title { get; private set; } = string.Empty;
+        public string Description { get; private set; } = string.Empty;
         public ServiceCategory Category { get; private set; }
         
         public decimal HourlyRate { get; private set; }
@@ -34,7 +34,6 @@ namespace DroneMarketplace.Domain.Entities
 
             return new Listing
             {
-                Id = Guid.NewGuid(),
                 PilotId = pilotId,
                 Title = title,
                 Description = description,
@@ -73,17 +72,21 @@ namespace DroneMarketplace.Domain.Entities
             {
                 ValidateActivationCompleteness();
             }
+
+            Touch();
         }
 
         public void Activate()
         {
             ValidateActivationCompleteness();
             IsActive = true;
+            Touch();
         }
 
         public void Deactivate()
         {
             IsActive = false;
+            Touch();
         }
 
         private void ValidateActivationCompleteness()

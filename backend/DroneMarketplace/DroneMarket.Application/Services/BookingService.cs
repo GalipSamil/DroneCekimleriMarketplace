@@ -1,32 +1,50 @@
 using DroneMarket.Application.DTOs;
 using DroneMarket.Application.Interfaces;
+using DroneMarket.Application.Common.Security;
+using DroneMarket.Application.Interfaces.Persistence;
 using DroneMarketplace.Domain.Entities;
-using Microsoft.EntityFrameworkCore;
+using DroneMarketplace.Domain.Exceptions;
 
 namespace DroneMarket.Application.Services
 {
     public class BookingService : IBookingService
     {
-        private readonly IApplicationDbContext _context;
+        private readonly IBookingRepository _bookingRepository;
+        private readonly IListingRepository _listingRepository;
+        private readonly ICurrentUserService _currentUserService;
+        private readonly IUnitOfWork _unitOfWork;
 
-        public BookingService(IApplicationDbContext context)
+        public BookingService(
+            IBookingRepository bookingRepository,
+            IListingRepository listingRepository,
+            ICurrentUserService currentUserService,
+            IUnitOfWork unitOfWork)
         {
-            _context = context;
+            _bookingRepository = bookingRepository;
+            _listingRepository = listingRepository;
+            _currentUserService = currentUserService;
+            _unitOfWork = unitOfWork;
         }
 
-        public async Task<Guid> CreateBookingAsync(string customerId, CreateBookingDto bookingDto)
+        public async Task<Guid> CreateBookingAsync(CreateBookingDto bookingDto)
         {
-            var listing = await _context.Listings
-                .FirstOrDefaultAsync(s => s.Id == bookingDto.ListingId);
+            var actor = _currentUserService.GetRequiredActor();
+            if (!actor.IsCustomer)
+                throw new ForbiddenAccessException("Sadece müşteri rolündeki kullanıcılar rezervasyon oluşturabilir.");
+
+            var listing = await _listingRepository.GetByIdAsync(bookingDto.ListingId);
 
             if (listing == null)
                 throw new KeyNotFoundException($"Listing with ID {bookingDto.ListingId} not found.");
+
+            if (!listing.IsActive)
+                throw new InvalidOperationException("Pasif ilanlar için rezervasyon oluşturulamaz.");
 
             // Domain handles calculation and validation natively
             var booking = Booking.Create(
                 listingId: bookingDto.ListingId,
                 listing: listing,
-                customerId: customerId,
+                customerId: actor.UserId,
                 startDate: bookingDto.StartDate,
                 endDate: bookingDto.EndDate,
                 type: bookingDto.Type,
@@ -38,60 +56,145 @@ namespace DroneMarket.Application.Services
                 customerNotes: bookingDto.CustomerNotes
             );
 
-            _context.Bookings.Add(booking);
-            await _context.SaveChangesAsync();
+            _bookingRepository.Add(booking);
+            await _unitOfWork.SaveChangesAsync();
 
             return booking.Id;
         }
 
         public async Task<BookingDto> GetBookingAsync(Guid bookingId)
         {
-            var booking = await _context.Bookings
-                .Include(b => b.Listing)
-                    .ThenInclude(s => s.Pilot)
-                        .ThenInclude(p => p.AppUser)
-                .Include(b => b.Customer)
-                .Include(b => b.Review)
-                .FirstOrDefaultAsync(b => b.Id == bookingId);
+            var booking = await _bookingRepository.GetByIdWithAccessGraphAsync(bookingId);
 
             if (booking == null)
                 throw new KeyNotFoundException($"Booking with ID {bookingId} not found.");
 
+            BookingAccessGuard.EnsureCanRead(booking, _currentUserService.GetRequiredActor());
             return MapToDto(booking);
         }
 
         public async Task<IEnumerable<BookingDto>> GetCustomerBookingsAsync(string customerId)
         {
-            var bookings = await _context.Bookings
-                .Include(b => b.Listing)
-                    .ThenInclude(s => s.Pilot)
-                .Include(b => b.Review)
-                .Where(b => b.CustomerId == customerId)
-                .OrderByDescending(b => b.BookingDate)
-                .ToListAsync();
+            var actor = _currentUserService.GetRequiredActor();
+            BookingAccessGuard.EnsureCustomerOrAdmin(customerId, actor);
 
+            var bookings = await _bookingRepository.GetByCustomerIdAsync(customerId);
+            return bookings.Select(MapToDto);
+        }
+
+        public async Task<IEnumerable<BookingDto>> GetMyBookingsAsync()
+        {
+            var actor = _currentUserService.GetRequiredActor();
+            var bookings = await _bookingRepository.GetByCustomerIdAsync(actor.UserId);
             return bookings.Select(MapToDto);
         }
 
         public async Task<IEnumerable<BookingDto>> GetPilotBookingsAsync(string pilotUserId)
         {
-            var bookings = await _context.Bookings
-                .Include(b => b.Listing)
-                .Include(b => b.Customer)
-                .Include(b => b.Review)
-                .Where(b => b.Listing.Pilot.AppUserId == pilotUserId)
-                .OrderByDescending(b => b.BookingDate)
-                .ToListAsync();
+            var actor = _currentUserService.GetRequiredActor();
+            BookingAccessGuard.EnsurePilotOrAdmin(pilotUserId, actor);
 
+            var bookings = await _bookingRepository.GetByPilotUserIdAsync(pilotUserId);
             return bookings.Select(MapToDto);
         }
 
         public async Task<bool> UpdateBookingStatusAsync(Guid bookingId, BookingStatus status, string? notes = null)
         {
-            var booking = await _context.Bookings.FindAsync(bookingId);
+            var booking = await _bookingRepository.GetByIdWithAccessGraphAsync(bookingId);
             if (booking == null) return false;
 
-            // Direct mapping logic replaced by strict Domain behavior
+            var actor = _currentUserService.GetRequiredActor();
+            ApplyStatusChange(booking, actor, status, notes);
+
+            await _unitOfWork.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> CancelBookingAsync(Guid bookingId, string reason)
+        {
+            var booking = await _bookingRepository.GetByIdWithAccessGraphAsync(bookingId);
+            if (booking == null) return false;
+
+            var actor = _currentUserService.GetRequiredActor();
+            if (!actor.IsAdmin && booking.CustomerId != actor.UserId)
+                throw new ForbiddenAccessException("Yalnızca rezervasyonu oluşturan müşteri veya admin iptal işlemi yapabilir.");
+
+            booking.CancelByCustomer(reason);
+            await _unitOfWork.SaveChangesAsync();
+
+            return true;
+        }
+
+        public async Task<IEnumerable<BookingDto>> GetBookingsByDateRangeAsync(DateTime startDate, DateTime endDate)
+        {
+            var bookings = await _bookingRepository.GetByDateRangeAsync(startDate, endDate);
+            return bookings.Select(MapToDto);
+        }
+
+        private static void ApplyStatusChange(Booking booking, ActorContext actor, BookingStatus status, string? notes)
+        {
+            if (actor.IsAdmin)
+            {
+                ApplyAdminStatusChange(booking, status, notes);
+                return;
+            }
+
+            if (booking.Listing?.Pilot?.AppUserId == actor.UserId)
+            {
+                ApplyPilotStatusChange(booking, status, notes);
+                return;
+            }
+
+            if (booking.CustomerId == actor.UserId)
+            {
+                ApplyCustomerStatusChange(booking, status, notes);
+                return;
+            }
+
+            throw new ForbiddenAccessException("Bu rezervasyon durumu üzerinde işlem yetkiniz yok.");
+        }
+
+        private static void ApplyPilotStatusChange(Booking booking, BookingStatus status, string? notes)
+        {
+            switch (status)
+            {
+                case BookingStatus.Accepted:
+                    booking.Accept(notes);
+                    break;
+                case BookingStatus.Rejected:
+                    booking.Reject(notes ?? "Pilot tarafından reddedildi.");
+                    break;
+                case BookingStatus.InProgress:
+                    booking.Start(notes);
+                    break;
+                case BookingStatus.Delivered:
+                    booking.Deliver(notes);
+                    break;
+                default:
+                    throw new ForbiddenAccessException("Pilot bu durum değişikliğini yapamaz.");
+            }
+        }
+
+        private static void ApplyCustomerStatusChange(Booking booking, BookingStatus status, string? notes)
+        {
+            switch (status)
+            {
+                case BookingStatus.InProgress when booking.Status == BookingStatus.Delivered:
+                    booking.RequestRevision(notes ?? "Müşteri revizyon talep etti.");
+                    break;
+                case BookingStatus.Completed:
+                    booking.Complete();
+                    break;
+                case BookingStatus.Cancelled:
+                    booking.CancelByCustomer(notes ?? "Müşteri tarafından iptal edildi.");
+                    break;
+                default:
+                    throw new ForbiddenAccessException("Müşteri bu durum değişikliğini yapamaz.");
+            }
+        }
+
+        private static void ApplyAdminStatusChange(Booking booking, BookingStatus status, string? notes)
+        {
             switch (status)
             {
                 case BookingStatus.Accepted:
@@ -113,58 +216,12 @@ namespace DroneMarket.Application.Services
                     booking.Complete();
                     break;
                 case BookingStatus.Cancelled:
-                    booking.CancelByCustomer(notes ?? "Kullanıcı tarafından iptal edildi.");
+                    booking.CancelByCustomer(notes ?? "Admin tarafından iptal edildi.");
                     break;
                 default:
                     booking.ForceStatusChange(status, notes);
                     break;
             }
-
-            await _context.SaveChangesAsync();
-            return true;
-        }
-
-        public async Task<bool> CancelBookingAsync(Guid bookingId, string reason)
-        {
-            var booking = await _context.Bookings.FindAsync(bookingId);
-            if (booking == null) return false;
-            
-            booking.CancelByCustomer(reason);
-            await _context.SaveChangesAsync();
-            
-            return true;
-        }
-
-        public async Task<decimal> CalculateBookingPriceAsync(Guid listingId, BookingType type, DateTime startDate, DateTime endDate)
-        {
-            var listing = await _context.Listings.FindAsync(listingId);
-            if (listing == null) throw new KeyNotFoundException("Listing not found");
-
-            // Ideally this sits in a PricingDomainService, but we duplicate pure logic here for preview endpoint efficiency.
-            var mockedHours = (decimal)(endDate - startDate).TotalHours;
-            var days = (int)Math.Ceiling((endDate - startDate).TotalDays);
-
-            switch (type)
-            {
-                case BookingType.Hourly:
-                    return listing.HourlyRate * mockedHours;
-                case BookingType.Daily:
-                    return listing.DailyRate * (days <= 0 ? 1 : days);
-                case BookingType.Project:
-                    return listing.ProjectRate;
-                default:
-                    return 0;
-            }
-        }
-
-        public async Task<IEnumerable<BookingDto>> GetBookingsByDateRangeAsync(DateTime startDate, DateTime endDate)
-        {
-             var bookings = await _context.Bookings
-                .Include(b => b.Listing)
-                .Where(b => b.StartDate >= startDate && b.EndDate <= endDate)
-                .ToListAsync();
-
-            return bookings.Select(MapToDto);
         }
 
         private static BookingDto MapToDto(Booking booking)

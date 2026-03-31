@@ -19,6 +19,7 @@ namespace DroneMarket.Infrastructure.Data
             var configuration = new ConfigurationBuilder()
                 .SetBasePath(apiProjectPath)
                 .AddJsonFile("appsettings.json", optional: false)
+                .AddEnvironmentVariables()
                 .Build();
 
             var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();

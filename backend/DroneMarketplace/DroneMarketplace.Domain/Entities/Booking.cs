@@ -3,16 +3,16 @@ namespace DroneMarketplace.Domain.Entities
     public class Booking : BaseEntity
     {
         public Guid ListingId { get; private set; }
-        public Listing Listing { get; private set; }
+        public Listing Listing { get; private set; } = default!;
 
-        public string CustomerId { get; private set; }
-        public AppUser Customer { get; private set; }
+        public string CustomerId { get; private set; } = string.Empty;
+        public AppUser Customer { get; private set; } = default!;
 
         public DateTime StartDate { get; private set; }
         public DateTime EndDate { get; private set; }
         public BookingType Type { get; private set; }
         
-        public string Location { get; private set; }
+        public string Location { get; private set; } = string.Empty;
         public double Latitude { get; private set; }
         public double Longitude { get; private set; }
         
@@ -50,7 +50,6 @@ namespace DroneMarketplace.Domain.Entities
 
             var booking = new Booking
             {
-                Id = Guid.NewGuid(),
                 ListingId = listingId,
                 CustomerId = customerId,
                 StartDate = startDate,
@@ -94,6 +93,7 @@ namespace DroneMarketplace.Domain.Entities
 
             Status = BookingStatus.Accepted;
             AppendPilotNote(pilotMessage);
+            Touch();
         }
 
         public void Reject(string reason)
@@ -103,6 +103,7 @@ namespace DroneMarketplace.Domain.Entities
 
             Status = BookingStatus.Rejected;
             AppendPilotNote($"[Reddedildi]: {reason}");
+            Touch();
         }
 
         public void Start(string? pilotMessage)
@@ -112,6 +113,7 @@ namespace DroneMarketplace.Domain.Entities
 
             Status = BookingStatus.InProgress;
             AppendPilotNote(pilotMessage);
+            Touch();
         }
 
         public void Deliver(string? pilotMessage)
@@ -121,6 +123,7 @@ namespace DroneMarketplace.Domain.Entities
 
             Status = BookingStatus.Delivered;
             AppendPilotNote(pilotMessage);
+            Touch();
         }
 
         public void Complete()
@@ -129,6 +132,7 @@ namespace DroneMarketplace.Domain.Entities
                 throw new InvalidOperationException("Müşteri onayı (Tamamlama) için önce 'Teslim Edildi' durumunda olmalıdır.");
 
             Status = BookingStatus.Completed;
+            Touch();
         }
         
         public void RequestRevision(string message)
@@ -138,6 +142,7 @@ namespace DroneMarketplace.Domain.Entities
 
             Status = BookingStatus.InProgress;
             AppendCustomerNote($"[İade/Düzeltme Talebi]: {message}");
+            Touch();
         }
 
         public void CancelByCustomer(string reason)
@@ -147,6 +152,7 @@ namespace DroneMarketplace.Domain.Entities
 
             Status = BookingStatus.Cancelled;
             AppendCustomerNote($"[İptal Sebebi]: {reason}");
+            Touch();
         }
 
         // Generic fallback status updater (used for admin forcing status)
@@ -154,6 +160,7 @@ namespace DroneMarketplace.Domain.Entities
         {
             Status = newStatus;
             AppendPilotNote($"[Sistem/Admin Güncellemesi]: {note}");
+            Touch();
         }
 
         private void AppendPilotNote(string? message)

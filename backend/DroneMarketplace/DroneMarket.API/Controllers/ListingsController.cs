@@ -4,7 +4,6 @@ using DroneMarket.Application.Common.Models;
 using DroneMarketplace.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace DroneMarketplace.Controllers
 {
@@ -20,15 +19,10 @@ namespace DroneMarketplace.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Pilot,Admin")] 
+        [Authorize(Policy = "PilotOnly")]
         public async Task<IActionResult> CreateListing([FromBody] CreateListingDto listingDto)
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-                return Unauthorized(new ApiResponse<string>("Oturum açmanız gerekiyor."));
-            
-            // Note: GlobalExceptionMiddleware handles InvalidOperationException and UnauthorizedAccessException logic
-            var listingId = await _listingService.CreateListingAsync(userId, listingDto);
+            var listingId = await _listingService.CreateListingAsync(listingDto);
             return Ok(new ApiResponse<Guid>(listingId, "İlan başarıyla oluşturuldu."));
         }
 
@@ -39,6 +33,17 @@ namespace DroneMarketplace.Controllers
             if (listing == null) 
                 return NotFound(new ApiResponse<string>("İlan bulunamadı."));
                 
+            return Ok(new ApiResponse<ListingDto>(listing));
+        }
+
+        [HttpGet("{id}/manage")]
+        [Authorize(Policy = "PilotOrAdmin")]
+        public async Task<IActionResult> GetManagedListing(Guid id)
+        {
+            var listing = await _listingService.GetManagedListingAsync(id);
+            if (listing == null)
+                return NotFound(new ApiResponse<string>("İlan bulunamadı."));
+
             return Ok(new ApiResponse<ListingDto>(listing));
         }
 
@@ -56,6 +61,14 @@ namespace DroneMarketplace.Controllers
             return Ok(new ApiResponse<IEnumerable<ListingDto>>(listings));
         }
 
+        [HttpGet("my-listings")]
+        [Authorize(Policy = "PilotOrAdmin")]
+        public async Task<IActionResult> GetMyListings()
+        {
+            var listings = await _listingService.GetMyListingsAsync();
+            return Ok(new ApiResponse<IEnumerable<ListingDto>>(listings));
+        }
+
         [HttpGet("location")]
         public async Task<IActionResult> GetListingsByLocation(double latitude, double longitude, double radiusKm = 50)
         {
@@ -64,33 +77,33 @@ namespace DroneMarketplace.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = "Pilot,Admin")]
+        [Authorize(Policy = "PilotOrAdmin")]
         public async Task<IActionResult> UpdateListing(Guid id, [FromBody] UpdateListingDto listingDto)
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized(new ApiResponse<string>("Oturum açmanız gerekiyor."));
-
-            var isAdmin = User.IsInRole("Admin") || User.Claims.Any(c => c.Type == ClaimTypes.Role && c.Value == "Admin");
-
-            var result = await _listingService.UpdateListingAsync(id, userId, isAdmin, listingDto);
+            var result = await _listingService.UpdateListingAsync(id, listingDto);
             if (!result) return NotFound(new ApiResponse<string>("İlan bulunamadı."));
             
             return Ok(new ApiResponse<bool>(true, "İlan başarıyla güncellendi."));
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Pilot,Admin")]
+        [Authorize(Policy = "PilotOrAdmin")]
         public async Task<IActionResult> DeleteListing(Guid id)
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized(new ApiResponse<string>("Oturum açmanız gerekiyor."));
-
-            var isAdmin = User.IsInRole("Admin") || User.Claims.Any(c => c.Type == ClaimTypes.Role && c.Value == "Admin");
-
-            var result = await _listingService.DeleteListingAsync(id, userId, isAdmin);
+            var result = await _listingService.DeleteListingAsync(id);
             if (!result) return NotFound(new ApiResponse<string>("İlan bulunamadı."));
 
             return Ok(new ApiResponse<bool>(true, "İlan başarıyla silindi."));
+        }
+
+        [HttpPut("{id}/activation")]
+        [Authorize(Policy = "PilotOrAdmin")]
+        public async Task<IActionResult> SetActivation(Guid id, [FromBody] SetListingActivationDto dto)
+        {
+            var result = await _listingService.SetListingActivationAsync(id, dto.IsActive);
+            if (!result) return NotFound(new ApiResponse<string>("İlan bulunamadı."));
+
+            return Ok(new ApiResponse<bool>(true, dto.IsActive ? "İlan aktif edildi." : "İlan pasife alındı."));
         }
     }
 }

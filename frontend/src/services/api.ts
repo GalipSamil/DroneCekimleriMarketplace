@@ -24,6 +24,25 @@ import type {
     AdminBookingDto
 } from '../types';
 
+interface LoginResponseDto {
+    userId: string;
+    isPilot: boolean;
+    token: string;
+}
+
+type LoginApiResponse = ApiResponse<LoginResponseDto> & Partial<LoginResponseDto>;
+type RegisterApiResponse = ApiResponse<string> & {
+    UserId?: string;
+    userId?: string;
+};
+
+type ApiEnvelope<T> = Partial<ApiResponse<T>> & {
+    Succeeded?: boolean;
+    Message?: string;
+    Data?: T;
+    Errors?: string[];
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5025/api';
 
 const api = axios.create({
@@ -31,6 +50,29 @@ const api = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
+});
+
+const isApiEnvelope = (value: unknown): value is ApiEnvelope<unknown> => {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+
+    const candidate = value as Record<string, unknown>;
+    return 'Succeeded' in candidate
+        || 'Message' in candidate
+        || 'Data' in candidate
+        || 'Errors' in candidate
+        || 'succeeded' in candidate
+        || 'message' in candidate
+        || 'data' in candidate
+        || 'errors' in candidate;
+};
+
+const normalizeApiResponse = <T>(value: ApiEnvelope<T>): ApiResponse<T> => ({
+    succeeded: value.succeeded ?? value.Succeeded ?? false,
+    message: value.message ?? value.Message ?? '',
+    data: value.data ?? value.Data as T,
+    errors: value.errors ?? value.Errors ?? [],
 });
 
 api.interceptors.request.use((config) => {
@@ -48,49 +90,93 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
+api.interceptors.response.use((response) => {
+    if (isApiEnvelope(response.data)) {
+        response.data = normalizeApiResponse(response.data);
+    }
+
+    return response;
+});
+
+export const extractApiErrorMessage = (error: unknown, fallback: string) => {
+    if (axios.isAxiosError(error)) {
+        const payload = error.response?.data as ApiEnvelope<unknown> | string | undefined;
+
+        if (typeof payload === 'string' && payload.trim()) {
+            return payload;
+        }
+
+        if (payload && typeof payload === 'object') {
+            const normalized = normalizeApiResponse(payload);
+            const firstError = normalized.errors?.find(Boolean);
+            return normalized.message || firstError || fallback;
+        }
+    }
+
+    if (error instanceof Error && error.message.trim()) {
+        return error.message;
+    }
+
+    return fallback;
+};
+
 // Auth API
 export const authAPI = {
     register: async (data: RegisterDto) => {
-        const response = await api.post('/Auth/register', data);
-        return response.data;
+        const response = await api.post<ApiResponse<string>>('/Auth/register', data);
+        return {
+            ...response.data,
+            UserId: response.data.data,
+            userId: response.data.data
+        } satisfies RegisterApiResponse;
     },
 
     login: async (data: LoginDto) => {
-        const response = await api.post('/Auth/login', data);
-        return response.data;
+        const response = await api.post<ApiResponse<LoginResponseDto>>('/Auth/login', data);
+        return {
+            ...response.data,
+            userId: response.data.data?.userId,
+            isPilot: response.data.data?.isPilot,
+            token: response.data.data?.token
+        } satisfies LoginApiResponse;
     },
 
     forgotPassword: async (data: ForgotPasswordDto) => {
-        const response = await api.post('/Auth/forgot-password', data);
+        const response = await api.post<ApiResponse<string>>('/Auth/forgot-password', data);
         return response.data;
     },
 
     resetPassword: async (data: ResetPasswordDto) => {
-        const response = await api.post('/Auth/reset-password', data);
+        const response = await api.post<ApiResponse<string>>('/Auth/reset-password', data);
         return response.data;
     },
 };
 
 // Pilot API
 export const pilotAPI = {
-    createOrUpdateProfile: async (profile: Partial<PilotProfile>) => {
-        const response = await api.post(`/Pilots/profile`, profile);
-        return response.data;
+    createOrUpdateProfile: async (userId: string, profile: Partial<PilotProfile>) => {
+        const response = await api.put<ApiResponse<PilotProfile>>(`/Pilots/profile/${userId}`, profile);
+        return response.data.data;
     },
 
     getProfile: async (userId: string) => {
-        const response = await api.get<PilotProfile>(`/Pilots/profile/${userId}`);
-        return response.data;
+        const response = await api.get<ApiResponse<PilotProfile>>(`/Pilots/profile/${userId}`);
+        return response.data.data;
+    },
+
+    getMyProfile: async () => {
+        const response = await api.get<ApiResponse<PilotProfile>>(`/Pilots/profile/me`);
+        return response.data.data;
     },
 
     searchPilots: async (latitude?: number, longitude?: number, radius?: number) => {
         const params = new URLSearchParams();
-        if (latitude) params.append('latitude', latitude.toString());
-        if (longitude) params.append('longitude', longitude.toString());
-        if (radius) params.append('radiusKm', radius.toString());
+        if (latitude !== undefined) params.append('latitude', latitude.toString());
+        if (longitude !== undefined) params.append('longitude', longitude.toString());
+        if (radius !== undefined) params.append('radiusKm', radius.toString());
 
-        const response = await api.get<PilotProfile[]>(`/Pilots/search?${params}`);
-        return response.data;
+        const response = await api.get<ApiResponse<PilotProfile[]>>(`/Pilots/search?${params}`);
+        return response.data.data;
     },
 };
 
@@ -119,6 +205,11 @@ export const listingAPI = {
 
     getByPilot: async (userId: string) => {
         const response = await api.get<ApiResponse<Listing[]>>(`/Listings/pilot/${userId}`);
+        return response.data.data;
+    },
+
+    getMine: async () => {
+        const response = await api.get<ApiResponse<Listing[]>>('/Listings/my-listings');
         return response.data.data;
     },
 
@@ -186,33 +277,33 @@ export const droneAPI = {
 // Booking API
 export const bookingAPI = {
     create: async (bookingData: CreateBookingDto) => {
-        const response = await api.post('/Bookings', bookingData);
-        return response.data;
+        const response = await api.post<ApiResponse<string>>('/Bookings', bookingData);
+        return response.data.data;
     },
 
     getById: async (id: string) => {
-        const response = await api.get<Booking>(`/Bookings/${id}`);
-        return response.data;
+        const response = await api.get<ApiResponse<Booking>>(`/Bookings/${id}`);
+        return response.data.data;
     },
 
     getCustomerBookings: async (customerId: string) => {
-        const response = await api.get<Booking[]>(`/Bookings/customer/${customerId}`);
-        return response.data;
+        const response = await api.get<ApiResponse<Booking[]>>(`/Bookings/customer/${customerId}`);
+        return response.data.data ?? [];
     },
 
     getPilotBookings: async (pilotUserId: string) => {
-        const response = await api.get<Booking[]>(`/Bookings/pilot/${pilotUserId}`);
-        return response.data;
+        const response = await api.get<ApiResponse<Booking[]>>(`/Bookings/pilot/${pilotUserId}`);
+        return response.data.data ?? [];
     },
 
     updateStatus: async (id: string, status: BookingStatus, notes?: string) => {
-        const response = await api.put(`/Bookings/${id}/status`, { status, notes });
-        return response.data;
+        const response = await api.put<ApiResponse<boolean>>(`/Bookings/${id}/status`, { status, notes });
+        return response.data.data;
     },
 
     cancel: async (id: string, reason: string) => {
-        const response = await api.put(`/Bookings/${id}/cancel`, { reason });
-        return response.data;
+        const response = await api.put<ApiResponse<boolean>>(`/Bookings/${id}/cancel`, { reason });
+        return response.data.data;
     },
 
     calculatePrice: async (serviceId: string, type: number, startDate: string, endDate: string) => {
@@ -223,8 +314,8 @@ export const bookingAPI = {
             endDate
         });
 
-        const response = await api.get<{ price: number }>(`/Bookings/calculate-price?${params}`);
-        return response.data;
+        const response = await api.get<ApiResponse<number>>(`/Bookings/calculate-price?${params}`);
+        return response.data.data ?? 0;
     },
 };
 
@@ -248,40 +339,40 @@ export const chatAPI = {
 
 // Review API
 export const reviewAPI = {
-    create: async (data: CreateReviewDto): Promise<Review> => {
-        const response = await api.post('/Reviews', data);
-        return response.data;
+    create: async (data: CreateReviewDto): Promise<Review | undefined> => {
+        const response = await api.post<ApiResponse<Review>>('/Reviews', data);
+        return response.data.data;
     },
     getByPilot: async (pilotId: string): Promise<Review[]> => {
-        const response = await api.get(`/Reviews/pilot/${pilotId}`);
-        return response.data;
+        const response = await api.get<ApiResponse<Review[]>>(`/Reviews/pilot/${pilotId}`);
+        return response.data.data ?? [];
     },
-    getByBooking: async (bookingId: string): Promise<Review> => {
-        const response = await api.get(`/Reviews/booking/${bookingId}`);
-        return response.data;
+    getByBooking: async (bookingId: string): Promise<Review | undefined> => {
+        const response = await api.get<ApiResponse<Review>>(`/Reviews/booking/${bookingId}`);
+        return response.data.data;
     }
 };
 
 // Admin API
 export const adminAPI = {
     getOverview: async () => {
-        const response = await api.get<AdminOverviewDto>('/Admin/overview');
-        return response.data;
+        const response = await api.get<ApiResponse<AdminOverviewDto>>('/Admin/overview');
+        return response.data.data;
     },
     getUsers: async () => {
-        const response = await api.get<AdminUserDto[]>('/Admin/users');
-        return response.data;
+        const response = await api.get<ApiResponse<AdminUserDto[]>>('/Admin/users');
+        return response.data.data;
     },
     getBookings: async () => {
-        const response = await api.get<AdminBookingDto[]>('/Admin/bookings');
-        return response.data;
+        const response = await api.get<ApiResponse<AdminBookingDto[]>>('/Admin/bookings');
+        return response.data.data;
     },
-    approvePilot: async (userId: string) => {
-        const response = await api.put<{ message: string }>(`/Admin/approve-pilot/${userId}`);
+    approvePilot: async (pilotProfileId: string) => {
+        const response = await api.put<ApiResponse<boolean>>(`/Pilots/${pilotProfileId}/verify`);
         return response.data;
     },
     deleteUser: async (userId: string) => {
-        const response = await api.delete<{ message: string }>(`/Admin/users/${userId}`);
+        const response = await api.delete<ApiResponse<boolean>>(`/Admin/users/${userId}`);
         return response.data;
     }
 };

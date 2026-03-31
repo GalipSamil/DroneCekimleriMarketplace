@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { User, Mail, Lock, AlertCircle, ArrowRight, Plane } from 'lucide-react';
-import { authAPI } from '../services/api';
+import { authAPI, extractApiErrorMessage } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import type { RegisterDto } from '../types';
 
@@ -21,7 +21,7 @@ export default function Register() {
             setLoading(true);
             setError('');
             const response = await authAPI.register(data);
-            const userId = response.UserId || response.userId || response;
+            const userId = response.UserId || response.userId;
 
             if (userId) {
                 const loginResponse = await authAPI.login({
@@ -39,8 +39,7 @@ export default function Register() {
                 throw new Error('Invalid response from server');
             }
         } catch (err: unknown) {
-            const errorObj = err as { response?: { data?: string } };
-            setError(errorObj.response?.data || 'Kayıt işlemi başarısız oldu.');
+            setError(extractApiErrorMessage(err, 'Kayıt işlemi başarısız oldu.'));
         } finally {
             setLoading(false);
         }

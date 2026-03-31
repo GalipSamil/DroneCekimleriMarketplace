@@ -1,92 +1,79 @@
 using DroneMarket.Application.DTOs;
+using DroneMarket.Application.Common.Security;
 using DroneMarket.Application.Interfaces;
+using DroneMarket.Application.Interfaces.Persistence;
 using DroneMarketplace.Domain.Entities;
-using Microsoft.EntityFrameworkCore;
 
 namespace DroneMarket.Application.Services
 {
     public class ChatService : IChatService
     {
-        private readonly IApplicationDbContext _context;
+        private readonly IMessageRepository _messageRepository;
+        private readonly IUnitOfWork _unitOfWork;
 
-        public ChatService(IApplicationDbContext context)
+        public ChatService(IMessageRepository messageRepository, IUnitOfWork unitOfWork)
         {
-            _context = context;
+            _messageRepository = messageRepository;
+            _unitOfWork = unitOfWork;
         }
 
-        public async Task<MessageDto> SendMessageAsync(string senderId, CreateMessageDto createMessageDto)
+        public async Task<MessageDto> SendMessageAsync(ActorContext actor, CreateMessageDto createMessageDto)
         {
-            var message = new Message
-            {
-                SenderId = senderId,
-                ReceiverId = createMessageDto.ReceiverId,
-                Content = createMessageDto.Content,
-                SentAt = DateTime.UtcNow,
-                IsRead = false
-            };
+            if (!await _messageRepository.UserExistsAsync(createMessageDto.ReceiverId))
+                throw new KeyNotFoundException("Mesaj gönderilecek kullanıcı bulunamadı.");
 
-            _context.Messages.Add(message);
-            await _context.SaveChangesAsync();
+            var hasSharedBooking = await _messageRepository.HaveSharedBookingAsync(actor.UserId, createMessageDto.ReceiverId);
+            ChatAccessGuard.EnsureCanSendMessage(createMessageDto.ReceiverId, actor, hasSharedBooking);
 
-            // Load Sender and Receiver for DTO mapping
-            
-            
-            // Re-fetching with Include for proper data return
-             var createdMessageQuery = await _context.Messages
-                .Include(m => m.Sender)
-                .Include(m => m.Receiver)
-                .FirstOrDefaultAsync(m => m.Id == message.Id);
+            var message = Message.Create(actor.UserId, createMessageDto.ReceiverId, createMessageDto.Content);
+            _messageRepository.Add(message);
+            await _unitOfWork.SaveChangesAsync();
 
+            var createdMessage = await _messageRepository.GetByIdWithUsersAsync(message.Id);
+            if (createdMessage == null)
+                throw new InvalidOperationException("Yeni oluşturulan mesaj yüklenemedi.");
 
-            return MapToDto(createdMessageQuery);
+            return MapToDto(createdMessage);
         }
 
-        public async Task<IEnumerable<MessageDto>> GetConversationAsync(string userId1, string userId2)
+        public async Task<IEnumerable<MessageDto>> GetConversationAsync(ActorContext actor, string otherUserId)
         {
-            var messages = await _context.Messages
-                .Include(m => m.Sender)
-                .Include(m => m.Receiver)
-                .Where(m => (m.SenderId == userId1 && m.ReceiverId == userId2) ||
-                            (m.SenderId == userId2 && m.ReceiverId == userId1))
-                .OrderBy(m => m.SentAt)
-                .ToListAsync();
+            if (!await _messageRepository.UserExistsAsync(otherUserId))
+                throw new KeyNotFoundException("Konuşma tarafı bulunamadı.");
 
+            var hasSharedBooking = await _messageRepository.HaveSharedBookingAsync(actor.UserId, otherUserId);
+            ChatAccessGuard.EnsureCanAccessConversation(otherUserId, actor, hasSharedBooking);
+
+            var messages = await _messageRepository.GetConversationAsync(actor.UserId, otherUserId);
             return messages.Select(MapToDto);
         }
 
-        public async Task<IEnumerable<MessageDto>> GetRecentMessagesAsync(string userId)
+        public async Task<IEnumerable<MessageDto>> GetRecentMessagesAsync(ActorContext actor)
         {
-             // This logic gets the last message of each conversation
-            var messages = await _context.Messages
-                .Include(m => m.Sender)
-                .Include(m => m.Receiver)
-                .Where(m => m.SenderId == userId || m.ReceiverId == userId)
-                .OrderByDescending(m => m.SentAt)
-                .ToListAsync();
+            var messages = await _messageRepository.GetRecentByUserAsync(actor.UserId);
 
-            // Group by the "other" user and key select the first one (which is the latest due to OrderByDescending)
-             var recentMessages = messages
-                .GroupBy(m => m.SenderId == userId ? m.ReceiverId : m.SenderId)
+            var recentMessages = messages
+                .GroupBy(m => m.SenderId == actor.UserId ? m.ReceiverId : m.SenderId)
                 .Select(g => g.First())
                 .ToList();
 
             return recentMessages.Select(MapToDto);
         }
 
-        public async Task<int> GetUnreadCountAsync(string userId)
+        public async Task<int> GetUnreadCountAsync(ActorContext actor)
         {
-            return await _context.Messages
-                .CountAsync(m => m.ReceiverId == userId && !m.IsRead);
+            return await _messageRepository.CountUnreadByReceiverAsync(actor.UserId);
         }
 
-        public async Task MarkAsReadAsync(Guid messageId)
+        public async Task<bool> MarkAsReadAsync(ActorContext actor, Guid messageId)
         {
-            var message = await _context.Messages.FindAsync(messageId);
-            if (message != null)
-            {
-                message.IsRead = true;
-                await _context.SaveChangesAsync();
-            }
+            var message = await _messageRepository.GetByIdAsync(messageId);
+            if (message == null)
+                return false;
+
+            message.MarkAsRead(actor.UserId);
+            await _unitOfWork.SaveChangesAsync();
+            return true;
         }
 
         private static MessageDto MapToDto(Message message)

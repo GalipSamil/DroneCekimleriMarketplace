@@ -1,14 +1,14 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+using DroneMarket.Application.Common.Security;
 using DroneMarket.Application.DTOs;
 
-namespace DroneMarket.Application.Services
+namespace DroneMarket.Application.Interfaces
 {
     public interface IReviewService
     {
-        Task<ReviewDto> CreateReviewAsync(string customerUserId, CreateReviewDto dto);
+        Task<ReviewDto> CreateReviewAsync(ActorContext actor, CreateReviewDto dto);
+        Task<ReviewDto?> UpdateReviewAsync(ActorContext actor, Guid reviewId, UpdateReviewDto dto);
+        Task<bool> DeleteReviewAsync(ActorContext actor, Guid reviewId);
         Task<IEnumerable<ReviewDto>> GetReviewsByPilotAsync(Guid pilotId);
-        Task<ReviewDto?> GetReviewByBookingAsync(Guid bookingId);
+        Task<ReviewDto?> GetReviewByBookingAsync(ActorContext actor, Guid bookingId);
     }
 }

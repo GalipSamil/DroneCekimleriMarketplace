@@ -5,9 +5,9 @@ namespace DroneMarketplace.Domain.Entities
 {
     public class AppUser : IdentityUser 
     {
-        public string FirstName { get; private set; }
-        public string LastName { get; private set; }
-        public string FullName { get; private set; }
+        public string FirstName { get; private set; } = string.Empty;
+        public string LastName { get; private set; } = string.Empty;
+        public string FullName { get; private set; } = string.Empty;
         public string? ProfilePictureUrl { get; private set; }
 
         public Pilot? PilotProfile { get; private set; }

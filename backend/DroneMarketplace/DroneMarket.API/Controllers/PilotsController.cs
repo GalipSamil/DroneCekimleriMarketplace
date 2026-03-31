@@ -1,9 +1,8 @@
+using DroneMarket.Application.Common.Models;
 using DroneMarket.Application.DTOs;
 using DroneMarket.Application.Interfaces;
-using DroneMarket.Application.Common.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace DroneMarketplace.Controllers
 {
@@ -12,61 +11,85 @@ namespace DroneMarketplace.Controllers
     public class PilotsController : ControllerBase
     {
         private readonly IPilotService _pilotService;
+        private readonly ICurrentUserService _currentUserService;
 
-        public PilotsController(IPilotService pilotService)
+        public PilotsController(IPilotService pilotService, ICurrentUserService currentUserService)
         {
             _pilotService = pilotService;
+            _currentUserService = currentUserService;
         }
 
-        [HttpPost("profile")]
-        [Authorize(Roles = "Pilot,Admin")]
-        public async Task<IActionResult> CreateOrUpdateProfile([FromBody] PilotProfileDto profileDto)
+        [HttpPut("profile/{userId}")]
+        [Authorize(Policy = "PilotOnly")]
+        public async Task<ActionResult<ApiResponse<PilotManagedProfileDto>>> CreateOrUpdateProfile(string userId, [FromBody] UpdatePilotProfileDto profileDto)
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-                return Unauthorized(new ApiResponse<string>("Oturum açmanız gerekiyor."));
-
-            await _pilotService.CreateOrUpdateProfileAsync(userId, profileDto);
-            return Ok(new ApiResponse<bool>(true, "Profil başarıyla güncellendi."));
+            var profile = await _pilotService.CreateOrUpdateProfileAsync(_currentUserService.GetRequiredActor(), userId, profileDto);
+            return Ok(new ApiResponse<PilotManagedProfileDto>(profile, "Profil başarıyla güncellendi."));
         }
 
         [HttpGet("profile/{userId}")]
-        public async Task<IActionResult> GetProfile(string userId)
+        public async Task<ActionResult<ApiResponse<PilotPublicProfileDto>>> GetPublicProfile(string userId)
         {
-            var profile = await _pilotService.GetProfileAsync(userId);
+            var profile = await _pilotService.GetPublicProfileAsync(userId);
             if (profile == null)
+            {
                 return NotFound(new ApiResponse<string>("Pilot profili bulunamadı."));
+            }
 
-            return Ok(new ApiResponse<PilotProfileDto>(profile));
+            return Ok(new ApiResponse<PilotPublicProfileDto>(profile));
+        }
+
+        [HttpGet("profile/{userId}/manage")]
+        [Authorize(Policy = "PilotOrAdmin")]
+        public async Task<ActionResult<ApiResponse<PilotManagedProfileDto>>> GetManagedProfile(string userId)
+        {
+            var profile = await _pilotService.GetManagedProfileAsync(_currentUserService.GetRequiredActor(), userId);
+            if (profile == null)
+            {
+                return NotFound(new ApiResponse<string>("Pilot profili bulunamadı."));
+            }
+
+            return Ok(new ApiResponse<PilotManagedProfileDto>(profile));
+        }
+
+        [HttpGet("profile/me")]
+        [Authorize(Policy = "PilotOrAdmin")]
+        public async Task<ActionResult<ApiResponse<PilotManagedProfileDto>>> GetMyManagedProfile()
+        {
+            var actor = _currentUserService.GetRequiredActor();
+            var profile = await _pilotService.GetManagedProfileAsync(actor, actor.UserId);
+            if (profile == null)
+            {
+                return NotFound(new ApiResponse<string>("Pilot profili bulunamadı."));
+            }
+
+            return Ok(new ApiResponse<PilotManagedProfileDto>(profile));
         }
 
         [HttpGet("search")]
-        public async Task<IActionResult> Search(double lat, double lon, double radiusKm)
+        public async Task<ActionResult<ApiResponse<IEnumerable<PilotPublicProfileDto>>>> Search(
+            [FromQuery(Name = "latitude")] double? latitude,
+            [FromQuery(Name = "longitude")] double? longitude,
+            [FromQuery] double? radiusKm)
         {
-            var pilots = await _pilotService.SearchPilotsAsync(lat, lon, radiusKm);
-            return Ok(new ApiResponse<IEnumerable<PilotProfileDto>>(pilots));
+            var pilots = await _pilotService.SearchPilotsAsync(latitude, longitude, radiusKm);
+            return Ok(new ApiResponse<IEnumerable<PilotPublicProfileDto>>(pilots));
         }
 
         [HttpPut("{pilotId}/verify")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Policy = "AdminOnly")]
         public async Task<IActionResult> VerifyPilot(Guid pilotId)
         {
-            // Domain will throw InvalidOperationException if SHGM license is missing
             await _pilotService.VerifyPilotAsync(pilotId);
             return Ok(new ApiResponse<bool>(true, "Pilot başarıyla onaylandı."));
         }
 
         [HttpPut("{pilotId}/revoke-verification")]
-        [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> RevokeVerification(Guid pilotId, [FromBody] RevokeVerificationDto dto)
+        [Authorize(Policy = "AdminOnly")]
+        public async Task<IActionResult> RevokeVerification(Guid pilotId, [FromBody] RevokePilotVerificationDto dto)
         {
             await _pilotService.RevokeVerificationAsync(pilotId, dto.Reason);
             return Ok(new ApiResponse<bool>(true, "Pilot doğrulaması iptal edildi."));
         }
-    }
-
-    public class RevokeVerificationDto
-    {
-        public string Reason { get; set; } = string.Empty;
     }
 }

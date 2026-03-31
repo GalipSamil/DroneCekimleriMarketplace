@@ -41,9 +41,14 @@ export default function AdminDashboard() {
         }
     };
 
-    const handleApprovePilot = async (userId: string) => {
+    const handleApprovePilot = async (pilotProfileId?: string) => {
+        if (!pilotProfileId) {
+            alert("Bu kullanıcı için pilot profili bulunamadı.");
+            return;
+        }
+
         try {
-            await adminAPI.approvePilot(userId);
+            await adminAPI.approvePilot(pilotProfileId);
             loadData();
         } catch (error) {
             console.error("Approval failed", error);
@@ -165,7 +170,7 @@ export default function AdminDashboard() {
                                 <td className="py-4 px-4">
                                     {user.role === 'Pilot' ? (
                                         !user.verified ? (
-                                            <button onClick={() => handleApprovePilot(user.id)} className="flex items-center gap-1.5 text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20 hover:bg-amber-500/20 transition-all font-semibold text-xs">
+                                            <button onClick={() => handleApprovePilot(user.pilotProfileId)} className="flex items-center gap-1.5 text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20 hover:bg-amber-500/20 transition-all font-semibold text-xs">
                                                 Onayla
                                             </button>
                                         ) : (

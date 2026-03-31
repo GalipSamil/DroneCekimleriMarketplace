@@ -4,7 +4,7 @@ namespace DroneMarketplace.Domain.Entities
 {
     public class Pilot : BaseEntity
     {
-        public string AppUserId { get; private set; }
+        public string AppUserId { get; private set; } = string.Empty;
         public AppUser? AppUser { get; private set; }
 
         public string? SHGMLicenseNumber { get; private set; }
@@ -33,7 +33,6 @@ namespace DroneMarketplace.Domain.Entities
 
             return new Pilot
             {
-                Id = Guid.NewGuid(),
                 AppUserId = appUserId,
                 IsVerified = false
             };
@@ -55,6 +54,8 @@ namespace DroneMarketplace.Domain.Entities
             {
                 IsVerified = false;
             }
+
+            Touch();
         }
 
         /// <summary>
@@ -66,6 +67,7 @@ namespace DroneMarketplace.Domain.Entities
                 throw new InvalidOperationException("Pilot onaylanabilmesi için geçerli bir SHGM lisans numarası girilmiş olmalıdır.");
 
             IsVerified = true;
+            Touch();
         }
 
         /// <summary>
@@ -77,6 +79,7 @@ namespace DroneMarketplace.Domain.Entities
                 throw new ArgumentException("Doğrulama iptal sebebi boş bırakılamaz.");
 
             IsVerified = false;
+            Touch();
         }
     }
 }

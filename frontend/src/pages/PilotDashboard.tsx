@@ -36,10 +36,10 @@ export default function PilotDashboard() {
     const [isProfileLoading, setIsProfileLoading] = useState(false);
 
     const loadListings = useCallback(async () => {
-        try { setListingsLoading(true); setListings(await listingAPI.getByPilot(userId!)); }
+        try { setListingsLoading(true); setListings(await listingAPI.getMine()); }
         catch (err) { console.error('Error loading listings:', err); }
         finally { setListingsLoading(false); }
-    }, [userId]);
+    }, []);
 
     const loadBookings = useCallback(async () => {
         try { setBookings(await bookingAPI.getPilotBookings(userId!)); }
@@ -62,7 +62,7 @@ export default function PilotDashboard() {
     const openSettings = async () => {
         setIsSettingsOpen(true);
         setIsProfileLoading(true);
-        try { const p = await pilotAPI.getProfile(userId!); if (p) setProfileForm(p); }
+        try { const p = await pilotAPI.getMyProfile(); if (p) setProfileForm(p); }
         catch (err) { console.error('Error loading profile:', err); }
         finally { setIsProfileLoading(false); }
     };
@@ -70,7 +70,7 @@ export default function PilotDashboard() {
     const handleSaveProfile = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSavingProfile(true);
-        try { await pilotAPI.createOrUpdateProfile(profileForm); setIsSettingsOpen(false); }
+        try { await pilotAPI.createOrUpdateProfile(userId!, profileForm); setIsSettingsOpen(false); }
         catch { alert('Profil kaydedilirken bir hata oluştu.'); }
         finally { setIsSavingProfile(false); }
     };

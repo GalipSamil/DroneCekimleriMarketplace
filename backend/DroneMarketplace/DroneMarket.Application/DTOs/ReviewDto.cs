@@ -14,4 +14,10 @@ namespace DroneMarket.Application.DTOs
         public string CustomerName { get; set; } = string.Empty;
         public string? CustomerProfilePictureUrl { get; set; }
     }
+
+    public class UpdateReviewDto
+    {
+        public int Rating { get; set; }
+        public string Comment { get; set; } = string.Empty;
+    }
 }

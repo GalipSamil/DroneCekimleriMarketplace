@@ -14,11 +14,10 @@ namespace DroneMarket.Infrastructure.Services
 
         public Task SendEmailAsync(string to, string subject, string body)
         {
-            _logger.LogInformation("================ MOCK EMAIL ================");
-            _logger.LogInformation($"To: {to}");
-            _logger.LogInformation($"Subject: {subject}");
-            _logger.LogInformation($"Body: {body}");
-            _logger.LogInformation("============================================");
+            _logger.LogWarning(
+                "Mock email service invoked. To: {To}, Subject: {Subject}",
+                to,
+                subject);
             return Task.CompletedTask;
         }
     }

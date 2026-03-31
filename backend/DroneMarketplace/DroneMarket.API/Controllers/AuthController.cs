@@ -1,6 +1,7 @@
 using DroneMarket.Application.DTOs;
 using DroneMarket.Application.Interfaces;
 using DroneMarket.Application.Common.Models;
+using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DroneMarketplace.Controllers
@@ -10,10 +11,12 @@ namespace DroneMarketplace.Controllers
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
+        private readonly IConfiguration _configuration;
 
-        public AuthController(IAuthService authService)
+        public AuthController(IAuthService authService, IConfiguration configuration)
         {
             _authService = authService;
+            _configuration = configuration;
         }
 
         [HttpPost("register")]
@@ -39,6 +42,12 @@ namespace DroneMarketplace.Controllers
         [HttpPost("forgot-password")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto forgotPasswordDto)
         {
+            if (!_configuration.GetValue<bool>("Features:EnablePasswordReset"))
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                    new ApiResponse<string>("Password reset is temporarily disabled."));
+            }
+
             await _authService.ForgotPasswordAsync(forgotPasswordDto.Email);
             return Ok(new ApiResponse<string>(null!, "If your email is registered, you will receive a reset link."));
         }
@@ -46,6 +55,12 @@ namespace DroneMarketplace.Controllers
         [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto resetPasswordDto)
         {
+            if (!_configuration.GetValue<bool>("Features:EnablePasswordReset"))
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                    new ApiResponse<string>("Password reset is temporarily disabled."));
+            }
+
             var result = await _authService.ResetPasswordAsync(resetPasswordDto.Email, resetPasswordDto.Token, resetPasswordDto.NewPassword);
             if (result)
             {

@@ -2,7 +2,6 @@ using DroneMarket.Application.DTOs;
 using DroneMarket.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
-using System.Security.Claims;
 
 namespace DroneMarket.API.Hubs
 {
@@ -10,18 +9,18 @@ namespace DroneMarket.API.Hubs
     public class ChatHub : Hub
     {
         private readonly IChatService _chatService;
+        private readonly ICurrentUserService _currentUserService;
 
-        public ChatHub(IChatService chatService)
+        public ChatHub(IChatService chatService, ICurrentUserService currentUserService)
         {
             _chatService = chatService;
+            _currentUserService = currentUserService;
         }
 
         public async Task SendMessage(CreateMessageDto createMessageDto)
         {
-            var senderId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(senderId)) return;
-
-            var messageDto = await _chatService.SendMessageAsync(senderId, createMessageDto);
+            var actor = _currentUserService.GetRequiredActor(Context.User);
+            var messageDto = await _chatService.SendMessageAsync(actor, createMessageDto);
 
             // Send to receiver
             // Note: In a real app, we would map ReceiverId to ConnectionId using a ConnectionManager service.

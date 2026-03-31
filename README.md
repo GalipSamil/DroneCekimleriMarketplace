@@ -7,6 +7,14 @@ Bu proje iki ana kısımdan oluşmaktadır:
 1. **Backend**: .NET Core (C#) ile geliştirilmiş güçlü bir REST API.
 2. **Frontend**: React (TypeScript) ile geliştirilmiş modern, etkileşimli ve kullanıcı dostu bir arayüz.
 
+## Backend Architecture Note
+Backend tarafındaki mimari kurallar ve son refactor standardı için şu dokümana bakın:
+
+- [Backend Architecture Note / Conventions](backend/DroneMarketplace/docs/backend-architecture-note.md)
+- Controller, service ve domain entity sorumluluklarının nasıl ayrıldığını açıklar.
+- Authorization, ownership ve actor-aware access kararlarının nerede kontrol edildiğini özetler.
+- Public read vs managed read ayrımını, admin bypass sınırlarını ve test yaklaşımını kısa şekilde tanımlar.
+
 ## Özellikler
 - **Kullanıcı Yönetimi**: Pilotlar ve müşteriler için ayrı kayıt/giriş (Authentication & Authorization).
 - **Hizmet Listeleme**: Pilotların sunduğu hizmetleri listeleme ve düzenleyebilme özellikleri.

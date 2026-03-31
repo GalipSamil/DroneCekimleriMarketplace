@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using DroneMarket.Application.Common.Models;
+using DroneMarketplace.Domain.Exceptions;
 
 namespace DroneMarket.API.Middleware
 {
@@ -32,7 +33,15 @@ namespace DroneMarket.API.Middleware
         private async Task HandleExceptionAsync(HttpContext context, Exception exception)
         {
             context.Response.ContentType = "application/json";
-            context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+            context.Response.StatusCode = exception switch
+            {
+                ForbiddenAccessException => (int)HttpStatusCode.Forbidden,
+                UnauthorizedAccessException => (int)HttpStatusCode.Unauthorized,
+                KeyNotFoundException => (int)HttpStatusCode.NotFound,
+                InvalidOperationException => (int)HttpStatusCode.BadRequest,
+                ArgumentException => (int)HttpStatusCode.BadRequest,
+                _ => (int)HttpStatusCode.InternalServerError
+            };
 
             // Return detailed error in development, generic error in production to avoid leaking info
             var message = _env.IsDevelopment() ? exception.Message : "Beklenmeyen bir sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin.";
@@ -41,7 +50,7 @@ namespace DroneMarket.API.Middleware
             // Manuel olarak Succeeded = false ayarla (ApiResponse constructor string alinca false yapiyor zaten)
             response.Succeeded = false;
 
-            _logger.LogError(exception, "Global Exception Caught: {Message}", exception.Message);
+            _logger.LogError(exception, "Global Exception Caught with status {StatusCode}: {Message}", context.Response.StatusCode, exception.Message);
 
             var json = JsonSerializer.Serialize(response);
             await context.Response.WriteAsync(json);

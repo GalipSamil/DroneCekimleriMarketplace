@@ -14,27 +14,28 @@ namespace DroneMarket.Application.DTOs
 
     public class RecentActivityDto
     {
-        public string Text { get; set; }
-        public string Time { get; set; }
+        public string Text { get; set; } = string.Empty;
+        public string Time { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
     }
 
     public class AdminUserDto
     {
-        public string Id { get; set; }
-        public string Name { get; set; }
-        public string Email { get; set; }
-        public string Role { get; set; }
-        public string Status { get; set; }
+        public string Id { get; set; } = string.Empty;
+        public Guid? PilotProfileId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Role { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
         public bool Verified { get; set; }
     }
 
     public class AdminBookingDto
     {
-        public string Id { get; set; }
-        public string Customer { get; set; }
-        public string Pilot { get; set; }
-        public string Date { get; set; }
+        public string Id { get; set; } = string.Empty;
+        public string Customer { get; set; } = string.Empty;
+        public string Pilot { get; set; } = string.Empty;
+        public string Date { get; set; } = string.Empty;
         public decimal Amount { get; set; }
         public int Status { get; set; }
     }

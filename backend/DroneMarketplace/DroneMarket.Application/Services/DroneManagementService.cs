@@ -1,56 +1,62 @@
 using DroneMarket.Application.DTOs;
 using DroneMarket.Application.Interfaces;
+using DroneMarket.Application.Interfaces.Persistence;
 using DroneMarketplace.Domain.Entities;
-using Microsoft.EntityFrameworkCore;
+using DroneMarketplace.Domain.Exceptions;
 
 namespace DroneMarket.Application.Services
 {
     public class DroneManagementService : IDroneManagementService
     {
-        private readonly IApplicationDbContext _context;
+        private readonly IDroneRepository _droneRepository;
+        private readonly IPilotRepository _pilotRepository;
+        private readonly ICurrentUserService _currentUserService;
+        private readonly IUnitOfWork _unitOfWork;
 
-        public DroneManagementService(IApplicationDbContext context)
+        public DroneManagementService(
+            IDroneRepository droneRepository,
+            IPilotRepository pilotRepository,
+            ICurrentUserService currentUserService,
+            IUnitOfWork unitOfWork)
         {
-            _context = context;
+            _droneRepository = droneRepository;
+            _pilotRepository = pilotRepository;
+            _currentUserService = currentUserService;
+            _unitOfWork = unitOfWork;
         }
 
-        public async Task<Guid> AddDroneAsync(string pilotUserId, CreateDroneDto droneDto)
+        public async Task<Guid> AddDroneAsync(CreateDroneDto droneDto)
         {
-            var pilot = await _context.Pilots
-                .FirstOrDefaultAsync(p => p.AppUserId == pilotUserId);
+            var actor = _currentUserService.GetRequiredActor();
+            if (!actor.IsPilot)
+                throw new ForbiddenAccessException("Drone ekleme işlemi yalnızca pilotlar için yetkilidir.");
+
+            var pilot = await _pilotRepository.GetByUserIdAsync(actor.UserId);
 
             if (pilot == null)
             {
                 throw new KeyNotFoundException("Pilot profile not found for this user.");
             }
 
-            var drone = new Drone
-            {
-                Id = Guid.NewGuid(),
-                PilotId = pilot.Id,
-                Model = droneDto.Model,
-                Brand = droneDto.Brand,
-                Type = droneDto.Type,
-                Specifications = droneDto.Specifications,
-                IsAvailable = true,
-                Weight = droneDto.Weight,
-                MaxFlightTime = droneDto.MaxFlightTime,
-                ImageUrl = droneDto.ImageUrl,
-                CreatedAt = DateTime.UtcNow
-            };
+            var drone = Drone.Create(
+                pilot.Id,
+                droneDto.Model,
+                droneDto.Brand,
+                droneDto.Type,
+                droneDto.Specifications,
+                droneDto.Weight,
+                droneDto.MaxFlightTime,
+                droneDto.ImageUrl);
 
-            _context.Drones.Add(drone);
-            await _context.SaveChangesAsync();
+            _droneRepository.Add(drone);
+            await _unitOfWork.SaveChangesAsync();
 
             return drone.Id;
         }
 
         public async Task<DroneDto> GetDroneAsync(Guid droneId)
         {
-            var drone = await _context.Drones
-                .Include(d => d.Pilot)
-                .ThenInclude(p => p.AppUser) // Assuming we want pilot name
-                .FirstOrDefaultAsync(d => d.Id == droneId);
+            var drone = await _droneRepository.GetByIdAsync(droneId);
 
             if (drone == null)
             {
@@ -62,68 +68,72 @@ namespace DroneMarket.Application.Services
 
         public async Task<IEnumerable<DroneDto>> GetPilotDronesAsync(string pilotUserId)
         {
-            var drones = await _context.Drones
-                .Include(d => d.Pilot)
-                .ThenInclude(p => p.AppUser)
-                .Where(d => d.Pilot.AppUserId == pilotUserId)
-                .OrderByDescending(d => d.CreatedAt)
-                .ToListAsync();
-
+            var drones = await _droneRepository.GetByPilotUserIdAsync(pilotUserId);
             return drones.Select(MapToDto);
         }
 
         public async Task<bool> UpdateDroneAsync(Guid droneId, UpdateDroneDto droneDto)
         {
-            var drone = await _context.Drones.FindAsync(droneId);
+            var drone = await _droneRepository.GetByIdWithPilotAsync(droneId);
             if (drone == null) return false;
 
-            drone.Model = droneDto.Model;
-            drone.Brand = droneDto.Brand;
-            drone.Type = droneDto.Type;
-            drone.Specifications = droneDto.Specifications;
-            drone.IsAvailable = droneDto.IsAvailable;
-            drone.Weight = droneDto.Weight;
-            drone.MaxFlightTime = droneDto.MaxFlightTime;
-            drone.ImageUrl = droneDto.ImageUrl;
+            EnsureCanManageDrone(drone);
+            drone.UpdateDetails(
+                droneDto.Model,
+                droneDto.Brand,
+                droneDto.Type,
+                droneDto.Specifications,
+                droneDto.Weight,
+                droneDto.MaxFlightTime,
+                droneDto.ImageUrl);
+            drone.SetAvailability(droneDto.IsAvailable);
 
-            await _context.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync();
             return true;
         }
 
         public async Task<bool> DeleteDroneAsync(Guid droneId)
         {
-            var drone = await _context.Drones.FindAsync(droneId);
+            var drone = await _droneRepository.GetByIdWithPilotAsync(droneId);
             if (drone == null) return false;
 
-            _context.Drones.Remove(drone);
-            await _context.SaveChangesAsync();
+            EnsureCanManageDrone(drone);
+            _droneRepository.Remove(drone);
+            await _unitOfWork.SaveChangesAsync();
             return true;
         }
 
         public async Task<bool> SetDroneAvailabilityAsync(Guid droneId, bool isAvailable)
         {
-            var drone = await _context.Drones.FindAsync(droneId);
+            var drone = await _droneRepository.GetByIdWithPilotAsync(droneId);
             if (drone == null) return false;
 
-            drone.IsAvailable = isAvailable;
-            await _context.SaveChangesAsync();
+            EnsureCanManageDrone(drone);
+            drone.SetAvailability(isAvailable);
+            await _unitOfWork.SaveChangesAsync();
             return true;
         }
 
         public async Task<IEnumerable<DroneDto>> GetAvailableDronesAsync(DroneType? type = null)
         {
-            var query = _context.Drones
-                .Include(d => d.Pilot)
-                .ThenInclude(p => p.AppUser)
-                .Where(d => d.IsAvailable);
+            var drones = await _droneRepository.GetAvailableAsync(type);
+            return drones.Select(MapToDto);
+        }
 
-            if (type.HasValue)
+        private void EnsureCanManageDrone(Drone drone)
+        {
+            var actor = _currentUserService.GetRequiredActor();
+            if (actor.IsAdmin)
             {
-                query = query.Where(d => d.Type == type.Value);
+                return;
             }
 
-            var drones = await query.ToListAsync();
-            return drones.Select(MapToDto);
+            if (drone.Pilot?.AppUserId == actor.UserId)
+            {
+                return;
+            }
+
+            throw new ForbiddenAccessException("Bu drone üzerinde işlem yapma yetkiniz yok.");
         }
 
         private static DroneDto MapToDto(Drone drone)

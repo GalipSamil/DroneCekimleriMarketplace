@@ -251,6 +251,7 @@ export interface RecentActivityDto {
 
 export interface AdminUserDto {
   id: string;
+  pilotProfileId?: string;
   name: string;
   email: string;
   role: string;

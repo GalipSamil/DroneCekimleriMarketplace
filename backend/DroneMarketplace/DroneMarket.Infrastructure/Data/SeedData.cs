@@ -1,5 +1,7 @@
 using DroneMarket.Infrastructure.Persistence;
+using DroneMarket.Application.Common.Security;
 using DroneMarketplace.Domain.Entities;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -10,46 +12,40 @@ namespace DroneMarket.Infrastructure.Data
 {
     public static class SeedData
     {
-        public static async Task InitializeAsync(IServiceProvider serviceProvider)
+        public static Task InitializeAsync(IServiceProvider serviceProvider)
+        {
+            var environment = serviceProvider.GetRequiredService<IWebHostEnvironment>();
+            return InitializeAsync(serviceProvider, environment);
+        }
+
+        public static async Task InitializeAsync(IServiceProvider serviceProvider, IWebHostEnvironment environment)
         {
             using var scope = serviceProvider.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+            var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
             var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
 
             var adminEmail = configuration["AdminSettings:Email"];
             var adminPassword = configuration["AdminSettings:Password"];
+            var runDemoDataSeed = configuration.GetValue<bool>("StartupTasks:RunDemoDataSeed");
 
-            // Ensure database is created
-            await context.Database.EnsureCreatedAsync();
+            await EnsureRolesAsync(roleManager);
+            await EnsureAdminUserAsync(userManager, adminEmail, adminPassword);
 
-            // Check if data already exists
-            try
+            if (string.Equals(environment.EnvironmentName, "Production", StringComparison.OrdinalIgnoreCase))
             {
-                if (!string.IsNullOrEmpty(adminEmail) && !string.IsNullOrEmpty(adminPassword))
-                {
-                    var adminExists = await userManager.FindByEmailAsync(adminEmail);
-                    if (adminExists == null)
-                    {
-                        var adminUser = AppUser.Create(adminEmail, "SkyMarket Admin");
-                        adminUser.EmailConfirmed = true;
-                        await userManager.CreateAsync(adminUser, adminPassword);
-                    }
-                    else
-                    {
-                        var token = await userManager.GeneratePasswordResetTokenAsync(adminExists);
-                        await userManager.ResetPasswordAsync(adminExists, token, adminPassword);
-                    }
-                }
-
-                if (await context.Listings.AnyAsync())
-                {
-                    return; // Data already seeded
-                }
+                return;
             }
-            catch
+
+            if (!runDemoDataSeed)
             {
-                // Tables might not exist yet, continue with seeding
+                return;
+            }
+
+            if (await context.Listings.AnyAsync())
+            {
+                return;
             }
 
             // Create test users
@@ -65,6 +61,9 @@ namespace DroneMarket.Infrastructure.Data
             await userManager.CreateAsync(pilot1, "Test123!");
             await userManager.CreateAsync(pilot2, "Test123!");
             await userManager.CreateAsync(customer1, "Test123!");
+            await EnsureUserRoleAsync(userManager, pilot1, SystemRoles.Pilot);
+            await EnsureUserRoleAsync(userManager, pilot2, SystemRoles.Pilot);
+            await EnsureUserRoleAsync(userManager, customer1, SystemRoles.Customer);
 
             // Create pilot profiles using domain factory
             var pilotProfile1 = Pilot.Create(pilot1.Id);
@@ -172,34 +171,78 @@ namespace DroneMarket.Infrastructure.Data
             // Create some drones
             var drones = new List<Drone>
             {
-                new Drone
-                {
-                    PilotId = pilotProfile1.Id,
-                    Model = "Mavic 3 Pro",
-                    Brand = "DJI",
-                    Type = DroneType.Photography,
-                    Specifications = "4/3 CMOS Hasselblad Kamera, 43 dakika uçuş süresi, 15km menzil",
-                    IsAvailable = true,
-                    Weight = 0.895m,
-                    MaxFlightTime = 43,
-                    ImageUrl = "https://images.unsplash.com/photo-1473968512647-3e447244af8f?w=300"
-                },
-                new Drone
-                {
-                    PilotId = pilotProfile2.Id,
-                    Model = "Matrice 300 RTK",
-                    Brand = "DJI",
-                    Type = DroneType.Commercial,
-                    Specifications = "IP45 koruma, 55 dakika uçuş, çoklu kamera desteği",
-                    IsAvailable = true,
-                    Weight = 6.3m,
-                    MaxFlightTime = 55,
-                    ImageUrl = "https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=300"
-                }
+                Drone.Create(
+                    pilotProfile1.Id,
+                    "Mavic 3 Pro",
+                    "DJI",
+                    DroneType.Photography,
+                    "4/3 CMOS Hasselblad Kamera, 43 dakika uçuş süresi, 15km menzil",
+                    0.895m,
+                    43,
+                    "https://images.unsplash.com/photo-1473968512647-3e447244af8f?w=300"),
+                Drone.Create(
+                    pilotProfile2.Id,
+                    "Matrice 300 RTK",
+                    "DJI",
+                    DroneType.Commercial,
+                    "IP45 koruma, 55 dakika uçuş, çoklu kamera desteği",
+                    6.3m,
+                    55,
+                    "https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=300")
             };
 
             context.Drones.AddRange(drones);
             await context.SaveChangesAsync();
+        }
+
+        private static async Task EnsureAdminUserAsync(
+            UserManager<AppUser> userManager,
+            string? adminEmail,
+            string? adminPassword)
+        {
+            if (string.IsNullOrWhiteSpace(adminEmail) || string.IsNullOrWhiteSpace(adminPassword))
+            {
+                return;
+            }
+
+            var adminExists = await userManager.FindByEmailAsync(adminEmail);
+            if (adminExists != null)
+            {
+                await EnsureUserRoleAsync(userManager, adminExists, SystemRoles.Admin);
+                return;
+            }
+
+            var adminUser = AppUser.Create(adminEmail, "SkyMarket Admin");
+            adminUser.EmailConfirmed = true;
+
+            var createResult = await userManager.CreateAsync(adminUser, adminPassword);
+            if (!createResult.Succeeded)
+            {
+                var errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
+                throw new InvalidOperationException($"Admin user could not be created: {errors}");
+            }
+
+            await EnsureUserRoleAsync(userManager, adminUser, SystemRoles.Admin);
+        }
+
+        private static async Task EnsureRolesAsync(RoleManager<IdentityRole> roleManager)
+        {
+            var roles = new[] { SystemRoles.Admin, SystemRoles.Pilot, SystemRoles.Customer };
+            foreach (var role in roles)
+            {
+                if (!await roleManager.RoleExistsAsync(role))
+                {
+                    await roleManager.CreateAsync(new IdentityRole(role));
+                }
+            }
+        }
+
+        private static async Task EnsureUserRoleAsync(UserManager<AppUser> userManager, AppUser user, string role)
+        {
+            if (!await userManager.IsInRoleAsync(user, role))
+            {
+                await userManager.AddToRoleAsync(user, role);
+            }
         }
     }
 }

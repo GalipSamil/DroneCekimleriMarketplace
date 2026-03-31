@@ -5,7 +5,7 @@ namespace DroneMarket.Application.Interfaces
 {
     public interface IDroneManagementService
     {
-        Task<Guid> AddDroneAsync(string pilotUserId, CreateDroneDto droneDto);
+        Task<Guid> AddDroneAsync(CreateDroneDto droneDto);
         Task<DroneDto> GetDroneAsync(Guid droneId);
         Task<IEnumerable<DroneDto>> GetPilotDronesAsync(string pilotUserId);
         Task<bool> UpdateDroneAsync(Guid droneId, UpdateDroneDto droneDto);

@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using DroneMarket.Application.Common.Security;
 using DroneMarket.Application.Interfaces;
 using DroneMarketplace.Domain.Entities;
 using Microsoft.Extensions.Configuration;
@@ -17,7 +18,7 @@ namespace DroneMarket.Infrastructure.Services
             _configuration = configuration;
         }
 
-        public string GenerateToken(AppUser user, bool isPilot)
+        public string GenerateToken(AppUser user, IReadOnlyCollection<string> roles)
         {
             var jwtSettings = _configuration.GetSection("JwtSettings");
             var secret = jwtSettings.GetValue<string>("Secret");
@@ -33,8 +34,10 @@ namespace DroneMarket.Infrastructure.Services
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
                 new Claim(ClaimTypes.Email, user.Email!),
-                new Claim("IsPilot", isPilot.ToString())
+                new Claim("IsPilot", roles.Contains(SystemRoles.Pilot).ToString())
             };
+
+            claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {

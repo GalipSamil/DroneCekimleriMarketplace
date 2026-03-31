@@ -3,7 +3,7 @@ namespace DroneMarketplace.Domain.Entities
     public class PilotAvailability : BaseEntity
     {
         public Guid PilotId { get; set; }
-        public Pilot Pilot { get; set; }
+        public Pilot Pilot { get; set; } = default!;
 
         public DateTime Date { get; set; }
         public TimeSpan StartTime { get; set; }
@@ -15,6 +15,6 @@ namespace DroneMarketplace.Domain.Entities
         public DayOfWeek? RecurringDayOfWeek { get; set; }
         public DateTime? RecurringEndDate { get; set; }
         
-        public string Notes { get; set; }
+        public string? Notes { get; set; }
     }
 }

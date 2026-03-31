@@ -1,56 +1,138 @@
+using DroneMarket.Application.Common.Security;
 using DroneMarket.Application.DTOs;
 using DroneMarket.Application.Interfaces;
+using DroneMarket.Application.Interfaces.Persistence;
 using DroneMarketplace.Domain.Entities;
-using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 
 namespace DroneMarket.Application.Services
 {
     public class PilotService : IPilotService
     {
-        private readonly IApplicationDbContext _context;
+        private readonly IPilotRepository _pilotRepository;
+        private readonly IUnitOfWork _unitOfWork;
 
-        public PilotService(IApplicationDbContext context)
+        public PilotService(IPilotRepository pilotRepository, IUnitOfWork unitOfWork)
         {
-            _context = context;
+            _pilotRepository = pilotRepository;
+            _unitOfWork = unitOfWork;
         }
 
-        public async Task CreateOrUpdateProfileAsync(string userId, PilotProfileDto profileDto)
+        public async Task<PilotManagedProfileDto> CreateOrUpdateProfileAsync(ActorContext actor, string userId, UpdatePilotProfileDto profileDto)
         {
-            var pilot = await _context.Pilots.FirstOrDefaultAsync(p => p.AppUserId == userId);
+            PilotAccessGuard.EnsureCanUpsertOwnProfile(userId, actor);
 
-            Point? location = null;
-            if (profileDto.Latitude != 0 || profileDto.Longitude != 0)
-            {
-                location = new Point(profileDto.Longitude, profileDto.Latitude) { SRID = 4326 };
-            }
+            var pilot = await _pilotRepository.GetByUserIdWithUserAsync(userId);
+            var location = ToLocation(profileDto.Latitude, profileDto.Longitude);
 
             if (pilot == null)
             {
-                // Use factory method — never raw constructor
                 pilot = Pilot.Create(userId);
                 pilot.UpdateProfile(profileDto.Bio, profileDto.EquipmentList, profileDto.SHGMLicenseNumber, location);
-                _context.Pilots.Add(pilot);
+                _pilotRepository.Add(pilot);
             }
             else
             {
-                // Domain method does property assignment and clears verification if license is removed
                 pilot.UpdateProfile(profileDto.Bio, profileDto.EquipmentList, profileDto.SHGMLicenseNumber, location);
             }
 
-            await _context.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync();
+
+            pilot = await _pilotRepository.GetByUserIdWithUserAsync(userId)
+                ?? throw new InvalidOperationException("Güncellenen pilot profili yüklenemedi.");
+
+            return MapManagedProfile(pilot);
         }
 
-        public async Task<PilotProfileDto?> GetProfileAsync(string userId)
+        public async Task<PilotPublicProfileDto?> GetPublicProfileAsync(string userId)
         {
-            var pilot = await _context.Pilots
-                .Include(p => p.AppUser)
-                .FirstOrDefaultAsync(p => p.AppUserId == userId);
+            var pilot = await _pilotRepository.GetByUserIdWithUserAsync(userId);
+            return pilot == null ? null : MapPublicProfile(pilot);
+        }
 
-            if (pilot == null) return null;
-
-            return new PilotProfileDto
+        public async Task<PilotManagedProfileDto?> GetManagedProfileAsync(ActorContext actor, string userId)
+        {
+            var pilot = await _pilotRepository.GetByUserIdWithUserAsync(userId);
+            if (pilot == null)
             {
+                return null;
+            }
+
+            PilotAccessGuard.EnsureCanReadManagedProfile(pilot, actor);
+            return MapManagedProfile(pilot);
+        }
+
+        public async Task<IEnumerable<PilotPublicProfileDto>> SearchPilotsAsync(double? latitude, double? longitude, double? radiusKm)
+        {
+            Point? location = null;
+            double? radiusMeters = null;
+
+            if (latitude.HasValue && longitude.HasValue)
+            {
+                location = new Point(longitude.Value, latitude.Value) { SRID = 4326 };
+                radiusMeters = (radiusKm ?? 50) * 1000;
+            }
+
+            var pilots = await _pilotRepository.SearchAsync(location, radiusMeters);
+            return pilots.Select(MapPublicProfile);
+        }
+
+        public async Task VerifyPilotAsync(Guid pilotId)
+        {
+            var pilot = await _pilotRepository.GetByIdAsync(pilotId);
+            if (pilot == null)
+            {
+                throw new KeyNotFoundException($"Pilot bulunamadı: {pilotId}");
+            }
+
+            pilot.Verify();
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        public async Task RevokeVerificationAsync(Guid pilotId, string reason)
+        {
+            var pilot = await _pilotRepository.GetByIdAsync(pilotId);
+            if (pilot == null)
+            {
+                throw new KeyNotFoundException($"Pilot bulunamadı: {pilotId}");
+            }
+
+            pilot.RevokeVerification(reason);
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        private static Point? ToLocation(double latitude, double longitude)
+        {
+            if (latitude == 0 && longitude == 0)
+            {
+                return null;
+            }
+
+            return new Point(longitude, latitude) { SRID = 4326 };
+        }
+
+        private static PilotPublicProfileDto MapPublicProfile(Pilot pilot)
+        {
+            return new PilotPublicProfileDto
+            {
+                Id = pilot.Id,
+                UserId = pilot.AppUserId,
+                FullName = pilot.AppUser?.FullName ?? string.Empty,
+                Bio = pilot.Bio,
+                EquipmentList = pilot.EquipmentList,
+                IsVerified = pilot.IsVerified,
+                Latitude = pilot.Location?.Y ?? 0,
+                Longitude = pilot.Location?.X ?? 0
+            };
+        }
+
+        private static PilotManagedProfileDto MapManagedProfile(Pilot pilot)
+        {
+            return new PilotManagedProfileDto
+            {
+                Id = pilot.Id,
+                UserId = pilot.AppUserId,
+                FullName = pilot.AppUser?.FullName ?? string.Empty,
                 Bio = pilot.Bio,
                 EquipmentList = pilot.EquipmentList,
                 SHGMLicenseNumber = pilot.SHGMLicenseNumber,
@@ -58,53 +140,6 @@ namespace DroneMarket.Application.Services
                 Latitude = pilot.Location?.Y ?? 0,
                 Longitude = pilot.Location?.X ?? 0
             };
-        }
-
-        public async Task<IEnumerable<PilotProfileDto>> SearchPilotsAsync(double lat, double lon, double radiusKm)
-        {
-            var location = new Point(lon, lat) { SRID = 4326 };
-
-            var pilots = await _context.Pilots
-                .Include(p => p.AppUser)
-                .Where(p => p.Location != null && p.Location.Distance(location) <= radiusKm * 1000)
-                .ToListAsync();
-
-            return pilots.Select(p => new PilotProfileDto
-            {
-                Bio = p.Bio,
-                EquipmentList = p.EquipmentList,
-                SHGMLicenseNumber = p.SHGMLicenseNumber,
-                IsVerified = p.IsVerified,
-                Latitude = p.Location?.Y ?? 0,
-                Longitude = p.Location?.X ?? 0
-            });
-        }
-
-        /// <summary>
-        /// Admin-only: verifies a pilot. Domain enforces SHGM license presence.
-        /// GlobalExceptionMiddleware handles InvalidOperationException if license is missing.
-        /// </summary>
-        public async Task VerifyPilotAsync(Guid pilotId)
-        {
-            var pilot = await _context.Pilots.FindAsync(pilotId);
-            if (pilot == null)
-                throw new KeyNotFoundException($"Pilot bulunamadı: {pilotId}");
-
-            pilot.Verify(); // Domain enforces: license must be present
-            await _context.SaveChangesAsync();
-        }
-
-        /// <summary>
-        /// Admin-only: revokes a pilot's verification.
-        /// </summary>
-        public async Task RevokeVerificationAsync(Guid pilotId, string reason)
-        {
-            var pilot = await _context.Pilots.FindAsync(pilotId);
-            if (pilot == null)
-                throw new KeyNotFoundException($"Pilot bulunamadı: {pilotId}");
-
-            pilot.RevokeVerification(reason);
-            await _context.SaveChangesAsync();
         }
     }
 }

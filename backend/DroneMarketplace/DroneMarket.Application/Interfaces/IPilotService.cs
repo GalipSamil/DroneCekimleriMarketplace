@@ -1,12 +1,14 @@
+using DroneMarket.Application.Common.Security;
 using DroneMarket.Application.DTOs;
 
 namespace DroneMarket.Application.Interfaces
 {
     public interface IPilotService
     {
-        Task CreateOrUpdateProfileAsync(string userId, PilotProfileDto profileDto);
-        Task<PilotProfileDto?> GetProfileAsync(string userId);
-        Task<IEnumerable<PilotProfileDto>> SearchPilotsAsync(double lat, double lon, double radiusKm);
+        Task<PilotManagedProfileDto> CreateOrUpdateProfileAsync(ActorContext actor, string userId, UpdatePilotProfileDto profileDto);
+        Task<PilotPublicProfileDto?> GetPublicProfileAsync(string userId);
+        Task<PilotManagedProfileDto?> GetManagedProfileAsync(ActorContext actor, string userId);
+        Task<IEnumerable<PilotPublicProfileDto>> SearchPilotsAsync(double? latitude, double? longitude, double? radiusKm);
         Task VerifyPilotAsync(Guid pilotId);
         Task RevokeVerificationAsync(Guid pilotId, string reason);
     }

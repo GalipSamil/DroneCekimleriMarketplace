@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Filter, Grid } from 'lucide-react';
-import { listingAPI } from '../services/api';
+import { extractApiErrorMessage, listingAPI } from '../services/api';
 import type { Listing } from '../types';
 import { ServiceCategory } from '../types';
 import { ServiceCard } from '../components/services/ServiceCard';
@@ -45,6 +45,7 @@ const BrowseDroneServices: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [services, setServices] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | undefined>();
   const [sortBy, setSortBy] = useState<SortKey>('price');
@@ -53,6 +54,7 @@ const BrowseDroneServices: React.FC = () => {
   const loadServices = useCallback(async () => {
     try {
       setLoading(true);
+      setError('');
       const data = await listingAPI.search(searchQuery, selectedCategory);
       const sorted = [...data].sort((a, b) => {
         if (sortBy === 'price') return a.hourlyRate - b.hourlyRate;
@@ -61,6 +63,8 @@ const BrowseDroneServices: React.FC = () => {
       setServices(sorted);
     } catch (err) {
       console.error('Failed to load services:', err);
+      setServices([]);
+      setError(extractApiErrorMessage(err, 'Hizmetler yüklenemedi.'));
     } finally {
       setLoading(false);
     }
@@ -143,6 +147,12 @@ const BrowseDroneServices: React.FC = () => {
           <p className="text-slate-500 text-sm mb-6 font-medium">
             <span className="text-slate-300 font-semibold">{services.length}</span> hizmet listeleniyor
           </p>
+        )}
+
+        {!loading && error && (
+          <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {error}
+          </div>
         )}
 
         {/* Grid */}

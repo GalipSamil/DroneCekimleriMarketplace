@@ -10,12 +10,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DroneMarket.Application.Services
 {
-    public class AdminService : IAdminService
+    public class AdminDashboardService : IAdminDashboardService
     {
         private readonly IApplicationDbContext _context;
         private readonly UserManager<AppUser> _userManager;
 
-        public AdminService(IApplicationDbContext context, UserManager<AppUser> userManager)
+        public AdminDashboardService(IApplicationDbContext context, UserManager<AppUser> userManager)
         {
             _context = context;
             _userManager = userManager;
@@ -25,9 +25,11 @@ namespace DroneMarket.Application.Services
         {
             var totalUsers = await _userManager.Users.CountAsync();
             var activePilots = await _context.Pilots.CountAsync(p => p.IsVerified);
-            var totalRevenue = await _context.Bookings
+            var completedBookingAmounts = await _context.Bookings
                 .Where(b => b.Status == BookingStatus.Completed)
-                .SumAsync(b => b.TotalPrice);
+                .Select(b => b.TotalPrice)
+                .ToListAsync();
+            var totalRevenue = completedBookingAmounts.Sum();
 
             var newRequests = await _context.Bookings.CountAsync(b => b.Status == BookingStatus.Pending);
 
@@ -60,20 +62,29 @@ namespace DroneMarket.Application.Services
             var users = await _userManager.Users.ToListAsync();
             var pilots = await _context.Pilots.ToListAsync();
             
-            return users.Select(user => {
+            var result = new List<AdminUserDto>();
+            foreach (var user in users)
+            {
                 var pilotProfile = pilots.FirstOrDefault(p => p.AppUserId == user.Id);
-                var isPilot = pilotProfile != null;
-                
-                return new AdminUserDto
+                var roles = await _userManager.GetRolesAsync(user);
+                var isAdmin = roles.Contains("Admin");
+                var isPilot = roles.Contains("Pilot") || pilotProfile != null;
+
+                result.Add(new AdminUserDto
                 {
                     Id = user.Id,
-                    Name = user.FullName ?? user.Email,
-                    Email = user.Email,
-                    Role = isPilot ? "Pilot" : "Müşteri",
-                    Status = isPilot ? (pilotProfile.IsVerified ? "Doğrulandı" : "Onay Bekliyor") : "Aktif",
-                    Verified = isPilot ? pilotProfile.IsVerified : true
-                };
-            }).ToList();
+                    PilotProfileId = pilotProfile?.Id,
+                    Name = !string.IsNullOrWhiteSpace(user.FullName)
+                        ? user.FullName
+                        : user.Email ?? user.UserName ?? string.Empty,
+                    Email = user.Email ?? string.Empty,
+                    Role = isAdmin ? "Admin" : (isPilot ? "Pilot" : "Müşteri"),
+                    Status = isAdmin ? "Sistem Yöneticisi" : (isPilot ? (pilotProfile?.IsVerified == true ? "Doğrulandı" : "Onay Bekliyor") : "Aktif"),
+                    Verified = isAdmin || (isPilot ? pilotProfile?.IsVerified == true : true)
+                });
+            }
+
+            return result;
         }
 
         public async Task<List<AdminBookingDto>> GetBookingsAsync()
@@ -96,27 +107,6 @@ namespace DroneMarket.Application.Services
                 Status = (int)b.Status
             }).ToList();
         }
-
-        public async Task<bool> ApprovePilotAsync(string userId)
-        {
-            var pilot = await _context.Pilots.FirstOrDefaultAsync(p => p.AppUserId == userId);
-            if (pilot == null) return false;
-
-            pilot.Verify();
-            await _context.SaveChangesAsync();
-            return true;
-        }
-
-        public async Task<bool> DeleteUserAsync(string userId)
-        {
-            // First check if the user is the super-admin
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null) return false;
-
-            var result = await _userManager.DeleteAsync(user);
-            return result.Succeeded;
-        }
-
         private string GetTimeAgo(DateTime dateTime)
         {
             var timeSpan = DateTime.UtcNow - dateTime;
