@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { X, ChevronRight, ChevronLeft, Image as ImageIcon, CheckCircle, Info, DollarSign, MapPin } from 'lucide-react';
-import { listingAPI } from '../../services/api';
+import { extractApiErrorMessage, listingAPI } from '../../services/api';
 import type { CreateListingDto, ServiceCategory } from '../../types';
 import { TagInput } from '../common/TagInput';
+import { usePreferences } from '../../context/preferences';
 
 const CATEGORIES: { value: ServiceCategory; label: string }[] = [
     { value: 0, label: 'Emlak' }, { value: 1, label: 'Düğün' },
@@ -18,6 +19,48 @@ const DEFAULT_LISTING: CreateListingDto = {
     coverImageUrl: '', maxDistance: 50, requiredEquipment: '', deliverableFormat: ''
 };
 
+const validateListingForm = (formData: CreateListingDto, language: 'tr' | 'en') => {
+    const titleLength = formData.title.trim().length;
+    if (titleLength < 5) {
+        return language === 'tr'
+            ? 'Hizmet başlığı en az 5 karakter olmalıdır.'
+            : 'Service title must be at least 5 characters.';
+    }
+
+    const descriptionLength = formData.description.trim().length;
+    if (descriptionLength < 20) {
+        return language === 'tr'
+            ? `Açıklama en az 20 karakter olmalıdır. ${descriptionLength}/20`
+            : `Description must be at least 20 characters. ${descriptionLength}/20`;
+    }
+
+    if (formData.hourlyRate <= 0) {
+        return language === 'tr'
+            ? 'Saatlik ücret 0\'dan büyük olmalıdır.'
+            : 'Hourly rate must be greater than 0.';
+    }
+
+    if (formData.dailyRate <= 0) {
+        return language === 'tr'
+            ? 'Günlük ücret 0\'dan büyük olmalıdır.'
+            : 'Daily rate must be greater than 0.';
+    }
+
+    if (formData.hourlyRate > formData.dailyRate) {
+        return language === 'tr'
+            ? 'Saatlik ücret, günlük ücretten fazla olamaz.'
+            : 'Hourly rate cannot be higher than daily rate.';
+    }
+
+    if (formData.maxDistance < 1 || formData.maxDistance > 1000) {
+        return language === 'tr'
+            ? 'Maksimum hizmet mesafesi 1 ile 1000 km arasında olmalıdır.'
+            : 'Maximum service distance must be between 1 and 1000 km.';
+    }
+
+    return '';
+};
+
 interface CreateListingModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -25,6 +68,7 @@ interface CreateListingModalProps {
 }
 
 export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListingModalProps) {
+    const { language } = usePreferences();
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState<CreateListingDto>(DEFAULT_LISTING);
@@ -52,8 +96,15 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
         }
 
         setError('');
+        const validationError = validateListingForm(formData, language);
+        if (validationError) {
+            return setError(validationError);
+        }
+
         if (!formData.coverImageUrl) {
-            return setError('Lütfen geçerli bir kapak görseli URL\'si ekleyin.');
+            return setError(language === 'tr'
+                ? 'Lütfen geçerli bir kapak görseli URL\'si ekleyin.'
+                : 'Please provide a valid cover image URL.');
         }
 
         setLoading(true);
@@ -68,20 +119,13 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
             setFormData(DEFAULT_LISTING);
             setStep(1);
             onSuccess();
-        } catch (err: any) {
-            const data = err.response?.data;
-            let msg = 'Hizmet oluşturulurken bir hata oluştu.';
-            
-            if (typeof data === 'string') {
-                msg = data;
-            } else if (data?.errors) {
-                const firstKey = Object.keys(data.errors)[0];
-                msg = data.errors[firstKey][0];
-            } else if (data?.message) {
-                msg = data.message;
-            }
-            
-            setError(msg);
+        } catch (err: unknown) {
+            setError(extractApiErrorMessage(
+                err,
+                language === 'tr'
+                    ? 'Hizmet oluşturulurken bir hata oluştu.'
+                    : 'An error occurred while creating the service.'
+            ));
         } finally {
             setLoading(false);
         }
@@ -98,7 +142,7 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
                             <div className="p-2 bg-blue-500/10 rounded-xl">
                                 <CheckCircle className="text-blue-500" size={20} />
                             </div>
-                            Yeni Hizmet Oluştur
+                            {language === 'tr' ? 'Yeni Hizmeti Yayınla' : 'Publish New Service'}
                         </h2>
                         <button 
                             type="button"
@@ -133,6 +177,11 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
                             <div>
                                 <label className="block text-sm font-semibold text-slate-300 mb-2">Detaylı Açıklama <span className="text-red-400">*</span></label>
                                 <textarea className="input-field min-h-[140px] shadow-inner resize-y" placeholder="Hizmetinizin detaylarını, deneyiminizi ve neler sunduğunuzu açıklayın..." value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
+                                <p className={`mt-2 text-xs ${formData.description.trim().length >= 20 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                    {language === 'tr'
+                                        ? `Minimum 20 karakter. Şu an: ${formData.description.trim().length}/20`
+                                        : `Minimum 20 characters. Current: ${formData.description.trim().length}/20`}
+                                </p>
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold text-slate-300 mb-2">Kategori <span className="text-red-400">*</span></label>
@@ -256,7 +305,9 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
                             ) : (
                                 <button type="submit" form="create-listing-form" disabled={loading} className="py-2.5 px-8 rounded-xl font-semibold bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100 flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/50">
                                     {loading && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                                    {loading ? 'Yayınlanıyor...' : 'Hizmeti Yayınla'}
+                                    {loading
+                                        ? (language === 'tr' ? 'Yayınlanıyor...' : 'Publishing...')
+                                        : (language === 'tr' ? 'Hizmeti Yayınla' : 'Publish Service')}
                                 </button>
                             )}
                         </div>

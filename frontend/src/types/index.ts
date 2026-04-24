@@ -29,15 +29,34 @@ export interface ResetPasswordDto {
   newPassword: string;
 }
 
+export interface ContactMessageDto {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+}
+
 export interface PilotProfile {
   id: string;
   userId: string;
+  fullName: string;
   bio?: string;
   equipmentList?: string;
   shgmLicenseNumber?: string;
+  verificationRejectionReason?: string;
+  profileImageUrl?: string;
   latitude?: number;
   longitude?: number;
   isVerified?: boolean;
+}
+
+export interface UpdatePilotProfileDto {
+  bio?: string;
+  equipmentList?: string;
+  shgmLicenseNumber?: string;
+  profileImageUrl?: string;
+  latitude: number;
+  longitude: number;
 }
 
 // Listing Types
@@ -58,6 +77,8 @@ export interface Listing {
   pilotUserId: string;
   pilotName: string;
   pilotLocation?: string;
+  pilotLatitude?: number;
+  pilotLongitude?: number;
   pilotIsVerified: boolean;
   averageRating: number;
   reviewCount: number;
@@ -232,6 +253,27 @@ export interface CreateReviewDto {
   bookingId: string;
   rating: number;
   comment: string;
+}
+
+export interface CustomRequest {
+  id: string;
+  category: ServiceCategory;
+  location: string;
+  date: string;
+  budget?: string;
+  details: string;
+  contactPhone: string;
+  createdAt: string;
+  customerUserId?: string;
+}
+
+export interface CreateCustomRequestDto {
+  category: ServiceCategory;
+  location: string;
+  date: string;
+  budget?: string;
+  details: string;
+  contactPhone: string;
 }
 
 // Admin Types

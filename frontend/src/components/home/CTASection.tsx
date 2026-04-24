@@ -1,54 +1,81 @@
 import { Link } from 'react-router-dom';
 import { CheckCircle } from 'lucide-react';
+import { usePreferences } from '../../context/preferences';
 
-const PERKS = [
-    { label: 'Komisyonsuz Başlangıç', color: 'text-emerald-400' },
-    { label: 'Güvenli Ödeme', color: 'text-blue-400' },
-    { label: 'Anlık Rezervasyon', color: 'text-violet-400' },
-];
+export const CTASection: React.FC = () => {
+    const { language, theme } = usePreferences();
+    const isLight = theme === 'light';
+    const copy = language === 'tr'
+        ? {
+            titleLead: 'Pilot Olmaya',
+            titleAccent: 'Hazır Mısın?',
+            description: 'Profilini oluştur, hizmetlerini listele ve uygun rezervasyon talepleriyle buluş.',
+            primary: 'Hemen Başvur',
+            secondary: 'Giriş Yap',
+            perks: [
+                { label: 'Komisyonsuz Başlangıç', color: 'text-[#059669]' },
+                { label: 'Doğrudan İletişim', color: 'text-[#2563eb]' },
+                { label: 'Rezervasyon Talepleri', color: 'text-[#7c3aed]' },
+            ],
+        }
+        : {
+            titleLead: 'Ready To Become',
+            titleAccent: 'A Pilot?',
+            description: 'Create your profile, list your services, and connect with relevant booking requests.',
+            primary: 'Apply Now',
+            secondary: 'Log In',
+            perks: [
+                { label: 'Zero-Commission Start', color: 'text-[#059669]' },
+                { label: 'Direct Communication', color: 'text-[#2563eb]' },
+                { label: 'Booking Requests', color: 'text-[#7c3aed]' },
+            ],
+        };
 
-export const CTASection: React.FC = () => (
-    <section className="py-28 md:py-36 relative overflow-hidden">
-        <div className="container mx-auto px-4 max-w-5xl relative z-10">
-            <div className="rounded-[2.5rem] bg-gradient-to-br from-slate-900 to-[#020617] border border-slate-800/80 p-10 md:p-20 text-center relative overflow-hidden shadow-2xl">
-                {/* Decorative blurs */}
-                <div className="absolute top-0 right-0 w-72 h-72 bg-blue-500/10 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-72 h-72 bg-emerald-500/10 rounded-full blur-[80px] translate-y-1/2 -translate-x-1/2 pointer-events-none" />
+    return (
+        <section className="relative overflow-hidden py-20 md:py-28">
+            <div className="container relative z-10 mx-auto max-w-4xl px-4">
+                <div
+                    className={`relative overflow-hidden rounded-2xl border p-10 text-center md:p-16 ${isLight
+                        ? 'border-slate-200 bg-white shadow-sm'
+                        : 'border-slate-800/80 bg-slate-900/50'
+                        }`}
+                >
+                    <h2 className={`relative z-10 mb-4 text-2xl font-bold tracking-tight md:text-4xl ${isLight ? 'text-slate-950' : 'text-slate-50'}`}>
+                        {copy.titleLead}{' '}
+                        <span className="text-blue-500">{copy.titleAccent}</span>
+                    </h2>
+                    <p className={`relative z-10 mx-auto mb-8 max-w-xl text-base leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                        {copy.description}
+                    </p>
 
-                <h2 className="text-3xl md:text-5xl font-extrabold tracking-tight mb-6 text-white relative z-10">
-                    Pilot Olmaya{' '}
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
-                        Hazır Mısın?
-                    </span>
-                </h2>
-                <p className="text-lg text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed font-light relative z-10">
-                    Yeteneklerini kazanca dönüştür. Türkiye'nin en büyük drone pilotu ağına katıl ve projeler almaya başla.
-                </p>
+                    <div className="relative z-10 flex flex-col justify-center gap-3 sm:flex-row">
+                        <Link
+                            to="/register"
+                            className="rounded-lg bg-blue-600 px-8 py-3 font-semibold text-white transition-colors hover:bg-blue-500"
+                        >
+                            {copy.primary}
+                        </Link>
+                        <Link
+                            to="/login"
+                            className={`rounded-lg px-8 py-3 font-semibold transition-colors ${isLight
+                                ? 'border border-slate-200 bg-slate-50 text-slate-800 hover:bg-slate-100'
+                                : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-800'
+                                }`}
+                        >
+                            {copy.secondary}
+                        </Link>
+                    </div>
 
-                <div className="flex flex-col sm:flex-row gap-4 justify-center relative z-10">
-                    <Link
-                        to="/register"
-                        className="bg-blue-600 hover:bg-blue-500 text-white font-semibold py-4 px-10 rounded-xl shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all duration-200"
-                    >
-                        Hemen Başvur
-                    </Link>
-                    <Link
-                        to="/login"
-                        className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold py-4 px-10 rounded-xl hover:-translate-y-0.5 transition-all duration-200"
-                    >
-                        Giriş Yap
-                    </Link>
-                </div>
-
-                <div className="mt-12 flex flex-wrap items-center justify-center gap-6 md:gap-10 text-sm text-slate-400 font-medium relative z-10">
-                    {PERKS.map((p) => (
-                        <div key={p.label} className="flex items-center gap-2">
-                            <CheckCircle size={16} className={p.color} />
-                            {p.label}
-                        </div>
-                    ))}
+                    <div className={`relative z-10 mt-8 flex flex-wrap items-center justify-center gap-6 text-sm ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                        {copy.perks.map((perk) => (
+                            <div key={perk.label} className="flex items-center gap-2">
+                                <CheckCircle size={15} className={perk.color} />
+                                <span>{perk.label}</span>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
-        </div>
-    </section>
-);
+        </section>
+    );
+};

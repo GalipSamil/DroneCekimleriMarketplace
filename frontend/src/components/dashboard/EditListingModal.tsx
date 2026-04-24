@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, ChevronRight, ChevronLeft, Image as ImageIcon, Edit2, Info, DollarSign, MapPin } from 'lucide-react';
-import { listingAPI } from '../../services/api';
-import type { UpdateListingDto, Listing } from '../../types';
+import { extractApiErrorMessage, listingAPI } from '../../services/api';
+import type { UpdateListingDto, Listing, ServiceCategory } from '../../types';
 import { TagInput } from '../common/TagInput';
+import { usePreferences } from '../../context/preferences';
 
 interface EditListingModalProps {
     isOpen: boolean;
@@ -11,7 +12,50 @@ interface EditListingModalProps {
     onSuccess: () => void;
 }
 
+const validateListingForm = (formData: UpdateListingDto, language: 'tr' | 'en') => {
+    const titleLength = formData.title.trim().length;
+    if (titleLength < 5) {
+        return language === 'tr'
+            ? 'Hizmet başlığı en az 5 karakter olmalıdır.'
+            : 'Service title must be at least 5 characters.';
+    }
+
+    const descriptionLength = formData.description.trim().length;
+    if (descriptionLength < 20) {
+        return language === 'tr'
+            ? `Açıklama en az 20 karakter olmalıdır. ${descriptionLength}/20`
+            : `Description must be at least 20 characters. ${descriptionLength}/20`;
+    }
+
+    if (formData.hourlyRate <= 0) {
+        return language === 'tr'
+            ? 'Saatlik ücret 0\'dan büyük olmalıdır.'
+            : 'Hourly rate must be greater than 0.';
+    }
+
+    if (formData.dailyRate <= 0) {
+        return language === 'tr'
+            ? 'Günlük ücret 0\'dan büyük olmalıdır.'
+            : 'Daily rate must be greater than 0.';
+    }
+
+    if (formData.hourlyRate > formData.dailyRate) {
+        return language === 'tr'
+            ? 'Saatlik ücret, günlük ücretten fazla olamaz.'
+            : 'Hourly rate cannot be higher than daily rate.';
+    }
+
+    if (formData.maxDistance < 1 || formData.maxDistance > 1000) {
+        return language === 'tr'
+            ? 'Maksimum hizmet mesafesi 1 ile 1000 km arasında olmalıdır.'
+            : 'Maximum service distance must be between 1 and 1000 km.';
+    }
+
+    return '';
+};
+
 export function EditListingModal({ isOpen, listing, onClose, onSuccess }: EditListingModalProps) {
+    const { language } = usePreferences();
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState<UpdateListingDto | null>(null);
@@ -66,8 +110,15 @@ export function EditListingModal({ isOpen, listing, onClose, onSuccess }: EditLi
         }
 
         setError('');
+        const validationError = validateListingForm(formData, language);
+        if (validationError) {
+            return setError(validationError);
+        }
+
         if (!formData.coverImageUrl) {
-            return setError('Lütfen geçerli bir kapak görseli URL\'si ekleyin.');
+            return setError(language === 'tr'
+                ? 'Lütfen geçerli bir kapak görseli URL\'si ekleyin.'
+                : 'Please provide a valid cover image URL.');
         }
 
         setLoading(true);
@@ -80,20 +131,13 @@ export function EditListingModal({ isOpen, listing, onClose, onSuccess }: EditLi
             const submitData = { ...formData, coverImageUrl: url };
             await listingAPI.update(listing.id, submitData);
             onSuccess();
-        } catch (err: any) {
-            const data = err.response?.data;
-            let msg = 'Hizmet güncellenirken bir hata oluştu.';
-            
-            if (typeof data === 'string') {
-                msg = data;
-            } else if (data?.errors) {
-                const firstKey = Object.keys(data.errors)[0];
-                msg = data.errors[firstKey][0];
-            } else if (data?.message) {
-                msg = data.message;
-            }
-            
-            setError(msg);
+        } catch (err: unknown) {
+            setError(extractApiErrorMessage(
+                err,
+                language === 'tr'
+                    ? 'Hizmet güncellenirken bir hata oluştu.'
+                    : 'An error occurred while updating the service.'
+            ));
         } finally {
             setLoading(false);
         }
@@ -163,11 +207,16 @@ export function EditListingModal({ isOpen, listing, onClose, onSuccess }: EditLi
                             <div>
                                 <label className="block text-sm font-semibold text-slate-300 mb-2">Detaylı Açıklama <span className="text-red-400">*</span></label>
                                 <textarea className="input-field min-h-[140px] shadow-inner resize-y" placeholder="Hizmetinizin detaylarını, deneyiminizi ve neler sunduğunuzu açıklayın..." value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
+                                <p className={`mt-2 text-xs ${formData.description.trim().length >= 20 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                    {language === 'tr'
+                                        ? `Minimum 20 karakter. Şu an: ${formData.description.trim().length}/20`
+                                        : `Minimum 20 characters. Current: ${formData.description.trim().length}/20`}
+                                </p>
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold text-slate-300 mb-2">Kategori <span className="text-red-400">*</span></label>
                                 <div className="relative">
-                                    <select className="input-field appearance-none cursor-pointer shadow-inner pr-10" value={formData.category} onChange={e => setFormData({ ...formData, category: Number(e.target.value) as any })}>
+                                    <select className="input-field appearance-none cursor-pointer shadow-inner pr-10" value={formData.category} onChange={e => setFormData({ ...formData, category: Number(e.target.value) as ServiceCategory })}>
                                         <option value={0} className="bg-slate-900">Emlak</option>
                                         <option value={1} className="bg-slate-900">Düğün</option>
                                         <option value={2} className="bg-slate-900">İnceleme</option>

@@ -32,7 +32,7 @@ namespace DroneMarketplace.Domain.Entities
             if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("İlan başlığı boş olamaz.");
             if (string.IsNullOrWhiteSpace(description)) throw new ArgumentException("İlan açıklaması boş olamaz.");
 
-            return new Listing
+            var listing = new Listing
             {
                 PilotId = pilotId,
                 Title = title,
@@ -45,8 +45,12 @@ namespace DroneMarketplace.Domain.Entities
                 MaxDistance = maxDistance,
                 RequiredEquipment = requiredEquipment,
                 DeliverableFormat = deliverableFormat,
-                IsActive = false // Default
+                IsActive = true
             };
+
+            listing.ValidateActivationCompleteness();
+
+            return listing;
         }
 
         public void UpdateDetails(string title, string description, ServiceCategory category, 

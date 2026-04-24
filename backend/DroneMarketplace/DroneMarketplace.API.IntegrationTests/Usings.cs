@@ -1,0 +1,11 @@
+﻿global using System.Net;
+global using System.Net.Http.Headers;
+global using System.Net.Http.Json;
+global using DroneMarketplace.API.IntegrationTests.Infrastructure;
+global using DroneMarketplace.Application.Common.Models;
+global using DroneMarketplace.Application.Common.Security;
+global using DroneMarketplace.Application.DTOs;
+global using DroneMarketplace.Infrastructure.Persistence;
+global using DroneMarketplace.Domain.Entities;
+global using Microsoft.EntityFrameworkCore;
+global using Xunit;

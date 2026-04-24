@@ -3,9 +3,18 @@ namespace Domain.UnitTests;
 public sealed class ListingTests
 {
     [Fact]
+    public void Create_WhenListingIsValid_SetsActiveByDefault()
+    {
+        var listing = CreateValidListing();
+
+        Assert.True(listing.IsActive);
+    }
+
+    [Fact]
     public void Activate_WhenListingHasValidPublishRequirements_SetsActive()
     {
         var listing = CreateValidListing();
+        listing.Deactivate();
 
         listing.Activate();
 
@@ -14,9 +23,9 @@ public sealed class ListingTests
     }
 
     [Fact]
-    public void Activate_WhenNoPricingExists_ThrowsInvalidOperationException()
+    public void Create_WhenNoPricingExists_ThrowsInvalidOperationException()
     {
-        var listing = Listing.Create(
+        Assert.Throws<InvalidOperationException>(() => Listing.Create(
             Guid.NewGuid(),
             "Aerial mapping package",
             "Detailed mapping workflow for land and construction inspections.",
@@ -27,15 +36,13 @@ public sealed class ListingTests
             "https://example.com/listing.jpg",
             75,
             "RTK drone",
-            "Orthomosaic");
-
-        Assert.Throws<InvalidOperationException>(() => listing.Activate());
+            "Orthomosaic"));
     }
 
     [Fact]
-    public void Activate_WhenCoverImageIsMissing_ThrowsInvalidOperationException()
+    public void Create_WhenCoverImageIsMissing_ThrowsInvalidOperationException()
     {
-        var listing = Listing.Create(
+        Assert.Throws<InvalidOperationException>(() => Listing.Create(
             Guid.NewGuid(),
             "Aerial mapping package",
             "Detailed mapping workflow for land and construction inspections.",
@@ -46,9 +53,7 @@ public sealed class ListingTests
             null,
             75,
             "RTK drone",
-            "Orthomosaic");
-
-        Assert.Throws<InvalidOperationException>(() => listing.Activate());
+            "Orthomosaic"));
     }
 
     [Fact]

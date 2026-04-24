@@ -3,6 +3,7 @@ import type {
     RegisterDto,
     LoginDto,
     PilotProfile,
+    UpdatePilotProfileDto,
     Listing,
     CreateListingDto,
     UpdateListingDto,
@@ -15,14 +16,19 @@ import type {
     BookingStatus,
     ApiResponse,
     MessageDto,
+    ContactMessageDto,
+    CreateCustomRequestDto,
     ForgotPasswordDto,
     ResetPasswordDto,
     Review,
     CreateReviewDto,
     AdminOverviewDto,
     AdminUserDto,
-    AdminBookingDto
+    AdminBookingDto,
+    CustomRequest
 } from '../types';
+import { API_BASE_URL } from '../config/runtime';
+import type { AppLanguage } from '../context/preferences';
 
 interface LoginResponseDto {
     userId: string;
@@ -40,10 +46,146 @@ type ApiEnvelope<T> = Partial<ApiResponse<T>> & {
     Succeeded?: boolean;
     Message?: string;
     Data?: T;
-    Errors?: string[];
+    Errors?: unknown;
 };
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5025/api';
+type ValidationErrors = Record<string, string[]>;
+const LANGUAGE_STORAGE_KEY = 'app-language';
+
+const getCurrentLanguage = (): AppLanguage => (
+    localStorage.getItem(LANGUAGE_STORAGE_KEY) === 'en' ? 'en' : 'tr'
+);
+
+type LocalizedErrorPattern = {
+    matches: string[];
+    tr: string;
+    en: string;
+};
+
+const LOCALIZED_ERROR_PATTERNS: LocalizedErrorPattern[] = [
+    {
+        matches: ['one or more validation errors occurred'],
+        tr: 'Gönderilen bilgiler doğrulanamadı. Lütfen alanları kontrol edin.',
+        en: 'Submitted data could not be validated. Please check the fields.'
+    },
+    {
+        matches: ['email already exists', 'email is already taken', 'duplicate email', 'duplicateusername', 'user already exists', 'bu email zaten kullaniliyor', 'bu email zaten kayıtlı', 'bu email zaten kayitli'],
+        tr: 'Bu e-posta adresi zaten kayıtlı.',
+        en: 'This email address is already registered.'
+    },
+    {
+        matches: ['invalid email or password', 'invalid credentials', 'geçersiz email veya şifre', 'gecersiz email veya sifre'],
+        tr: 'E-posta veya şifre hatalı.',
+        en: 'Incorrect email or password.'
+    },
+    {
+        matches: ['unauthorized', 'yetkisiz'],
+        tr: 'Bu işlem için giriş yapmanız gerekiyor.',
+        en: 'You need to sign in to perform this action.'
+    },
+    {
+        matches: ['forbidden', 'yasak', 'bu işlemi gerçekleştirme yetkiniz yok', 'bu islemi gerceklestirme yetkiniz yok'],
+        tr: 'Bu işlem için yetkiniz yok.',
+        en: 'You do not have permission to perform this action.'
+    },
+    {
+        matches: ['not found', 'bulunamadı', 'bulunamadi'],
+        tr: 'İstenen kayıt bulunamadı.',
+        en: 'The requested record was not found.'
+    },
+    {
+        matches: ['description must be between 20 and 2000 characters', 'description must be at least 20 characters', 'açıklama en az 20 karakter', 'aciklama en az 20 karakter', 'açıklama 20-2000 karakter arasında', 'aciklama 20-2000 karakter arasinda'],
+        tr: 'Açıklama en az 20 karakter olmalıdır.',
+        en: 'Description must be at least 20 characters.'
+    },
+    {
+        matches: ['title must be between 5 and 200 characters', 'title must be at least 5 characters', 'başlık en az 5 karakter', 'baslik en az 5 karakter', 'başlık 5-200 karakter arasında', 'baslik 5-200 karakter arasinda'],
+        tr: 'Hizmet başlığı en az 5 karakter olmalıdır.',
+        en: 'Service title must be at least 5 characters.'
+    },
+    {
+        matches: ['password must be at least 6 characters', 'şifre en az 6 karakter', 'sifre en az 6 karakter'],
+        tr: 'Şifre en az 6 karakter olmalıdır.',
+        en: 'Password must be at least 6 characters.'
+    },
+    {
+        matches: ['passwords must have at least one uppercase', 'at least one uppercase', 'en az bir büyük harf'],
+        tr: 'Şifre en az 1 büyük harf içermelidir.',
+        en: 'Password must contain at least 1 uppercase letter.'
+    },
+    {
+        matches: ['passwords must have at least one lowercase', 'at least one lowercase', 'en az bir küçük harf', 'en az bir kucuk harf'],
+        tr: 'Şifre en az 1 küçük harf içermelidir.',
+        en: 'Password must contain at least 1 lowercase letter.'
+    },
+    {
+        matches: ['passwords must have at least one digit', 'at least one digit', 'en az bir rakam'],
+        tr: 'Şifre en az 1 rakam içermelidir.',
+        en: 'Password must contain at least 1 number.'
+    },
+    {
+        matches: ['description is required', 'açıklama gereklidir', 'aciklama gereklidir', 'açıklama zorunludur', 'aciklama zorunludur'],
+        tr: 'Açıklama zorunludur.',
+        en: 'Description is required.'
+    },
+    {
+        matches: ['title is required', 'başlık gereklidir', 'baslik gereklidir', 'başlık zorunludur', 'baslik zorunludur'],
+        tr: 'Başlık zorunludur.',
+        en: 'Title is required.'
+    },
+    {
+        matches: ['hourly rate must be greater than 0', 'saatlik ücret 0\'dan büyük olmalıdır', 'saatlik ucret 0\'dan buyuk olmalidir'],
+        tr: 'Saatlik ücret 0\'dan büyük olmalıdır.',
+        en: 'Hourly rate must be greater than 0.'
+    },
+    {
+        matches: ['hourly rate cannot exceed daily rate', 'saatlik ücret, günlük ücretten fazla olamaz', 'saatlik ucret, gunluk ucretten fazla olamaz'],
+        tr: 'Saatlik ücret, günlük ücretten fazla olamaz.',
+        en: 'Hourly rate cannot be higher than daily rate.'
+    },
+    {
+        matches: ['distance must be between 1 and 1000 km', 'maksimum mesafe 1-1000 km arası olmalıdır', 'maksimum mesafe 1-1000 km arasi olmalidir', 'mesafe 1 ile 1000 km arasında olmalıdır', 'mesafe 1 ile 1000 km arasinda olmalidir'],
+        tr: 'Maksimum hizmet mesafesi 1 ile 1000 km arasında olmalıdır.',
+        en: 'Maximum service distance must be between 1 and 1000 km.'
+    }
+];
+
+const normalizeMessageKey = (message: string) => message
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+
+const localizeKnownErrorMessage = (message: string, language: AppLanguage) => {
+    const normalized = normalizeMessageKey(message);
+    const matchedPattern = LOCALIZED_ERROR_PATTERNS.find((pattern) =>
+        pattern.matches.some((candidate) => normalized.includes(normalizeMessageKey(candidate)))
+    );
+
+    if (!matchedPattern) {
+        return message;
+    }
+
+    return language === 'tr' ? matchedPattern.tr : matchedPattern.en;
+};
+
+const normalizeErrors = (value: unknown): string[] => {
+    if (Array.isArray(value)) {
+        return value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
+    }
+
+    if (typeof value === 'string' && value.trim()) {
+        return [value];
+    }
+
+    if (value && typeof value === 'object') {
+        return Object.values(value as ValidationErrors)
+            .flatMap(entry => Array.isArray(entry) ? entry : [])
+            .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
+    }
+
+    return [];
+};
 
 const api = axios.create({
     baseURL: API_BASE_URL,
@@ -72,7 +214,7 @@ const normalizeApiResponse = <T>(value: ApiEnvelope<T>): ApiResponse<T> => ({
     succeeded: value.succeeded ?? value.Succeeded ?? false,
     message: value.message ?? value.Message ?? '',
     data: value.data ?? value.Data as T,
-    errors: value.errors ?? value.Errors ?? [],
+    errors: normalizeErrors(value.errors ?? value.Errors),
 });
 
 api.interceptors.request.use((config) => {
@@ -99,22 +241,34 @@ api.interceptors.response.use((response) => {
 });
 
 export const extractApiErrorMessage = (error: unknown, fallback: string) => {
+    const language = getCurrentLanguage();
+
     if (axios.isAxiosError(error)) {
-        const payload = error.response?.data as ApiEnvelope<unknown> | string | undefined;
+        const payload = error.response?.data as Record<string, unknown> | string | undefined;
 
         if (typeof payload === 'string' && payload.trim()) {
-            return payload;
+            return localizeKnownErrorMessage(payload, language);
         }
 
         if (payload && typeof payload === 'object') {
-            const normalized = normalizeApiResponse(payload);
-            const firstError = normalized.errors?.find(Boolean);
-            return normalized.message || firstError || fallback;
+            const message =
+                typeof payload.message === 'string' ? payload.message :
+                typeof payload.Message === 'string' ? payload.Message :
+                typeof payload.detail === 'string' ? payload.detail :
+                typeof payload.title === 'string' ? payload.title :
+                '';
+            const errors = normalizeErrors(
+                payload.errors
+                ?? payload.Errors
+                ?? payload['']
+            ).map((entry) => localizeKnownErrorMessage(entry, language));
+
+            return localizeKnownErrorMessage(message, language) || errors[0] || fallback;
         }
     }
 
     if (error instanceof Error && error.message.trim()) {
-        return error.message;
+        return localizeKnownErrorMessage(error.message, language);
     }
 
     return fallback;
@@ -142,7 +296,7 @@ export const authAPI = {
     },
 
     forgotPassword: async (data: ForgotPasswordDto) => {
-        const response = await api.post<ApiResponse<string>>('/Auth/forgot-password', data);
+        const response = await api.post<ApiResponse<string | null>>('/Auth/forgot-password', data);
         return response.data;
     },
 
@@ -152,9 +306,27 @@ export const authAPI = {
     },
 };
 
+export const contactAPI = {
+    sendMessage: async (data: ContactMessageDto) => {
+        const response = await api.post<ApiResponse<string | null>>('/Contact', data);
+        return response.data;
+    },
+};
+
+export const customRequestAPI = {
+    create: async (data: CreateCustomRequestDto) => {
+        const response = await api.post<ApiResponse<CustomRequest>>('/CustomRequests', data);
+        return response.data.data;
+    },
+    list: async () => {
+        const response = await api.get<ApiResponse<CustomRequest[]>>('/Admin/custom-requests');
+        return response.data.data ?? [];
+    },
+};
+
 // Pilot API
 export const pilotAPI = {
-    createOrUpdateProfile: async (userId: string, profile: Partial<PilotProfile>) => {
+    createOrUpdateProfile: async (userId: string, profile: UpdatePilotProfileDto) => {
         const response = await api.put<ApiResponse<PilotProfile>>(`/Pilots/profile/${userId}`, profile);
         return response.data.data;
     },
@@ -166,6 +338,11 @@ export const pilotAPI = {
 
     getMyProfile: async () => {
         const response = await api.get<ApiResponse<PilotProfile>>(`/Pilots/profile/me`);
+        return response.data.data;
+    },
+
+    getManagedProfile: async (userId: string) => {
+        const response = await api.get<ApiResponse<PilotProfile>>(`/Pilots/profile/${userId}/manage`);
         return response.data.data;
     },
 
@@ -369,6 +546,10 @@ export const adminAPI = {
     },
     approvePilot: async (pilotProfileId: string) => {
         const response = await api.put<ApiResponse<boolean>>(`/Pilots/${pilotProfileId}/verify`);
+        return response.data;
+    },
+    revokePilotVerification: async (pilotProfileId: string, reason: string) => {
+        const response = await api.put<ApiResponse<boolean>>(`/Pilots/${pilotProfileId}/revoke-verification`, { reason });
         return response.data;
     },
     deleteUser: async (userId: string) => {

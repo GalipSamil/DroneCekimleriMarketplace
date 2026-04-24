@@ -5,6 +5,31 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
   esbuild: {
-    drop: mode === 'production' ? ['console', 'debugger'] : [],
+    drop: mode === 'production' || mode === 'docker' ? ['console', 'debugger'] : [],
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) {
+            return undefined
+          }
+
+          if (id.includes('@microsoft/signalr')) {
+            return 'signalr'
+          }
+
+          if (
+            id.includes('react') ||
+            id.includes('scheduler') ||
+            id.includes('react-router')
+          ) {
+            return 'react-vendor'
+          }
+
+          return 'vendor'
+        },
+      },
+    },
   },
 }))

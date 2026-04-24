@@ -1,4 +1,5 @@
 import * as signalR from '@microsoft/signalr';
+import { SIGNALR_HUB_URL } from '../config/runtime';
 
 type MessageReceivedHandler = (message: unknown) => void;
 
@@ -16,7 +17,7 @@ class SignalRService {
         if (this.connection) return;
 
         this.connection = new signalR.HubConnectionBuilder()
-            .withUrl(`${(import.meta.env.VITE_API_URL || 'http://localhost:5025/api').replace('/api', '')}/chathub`, {
+            .withUrl(SIGNALR_HUB_URL, {
                 accessTokenFactory: () => token
             })
             .withAutomaticReconnect()

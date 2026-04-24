@@ -1,41 +1,53 @@
 import { useState } from 'react';
 import { authAPI, extractApiErrorMessage } from '../services/api';
+import { usePreferences } from '../context/preferences';
 import type { ForgotPasswordDto, ResetPasswordDto } from '../types';
 
 export const useForgotPassword = (onSuccessReset: () => void) => {
-    const [step, setStep] = useState<'request' | 'reset'>('request');
+    const { language } = usePreferences();
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
-    const [email, setEmail] = useState('');
+    const copy = language === 'tr'
+        ? {
+            emailMessage: 'Eğer bu email kayıtlıysa, şifre sıfırlama bağlantısı gönderildi.',
+            genericError: 'Bir hata oluştu.',
+            successReset: 'Şifreniz başarıyla sıfırlandı. Giriş sayfasına yönlendiriliyorsunuz...',
+        }
+        : {
+            emailMessage: 'If your email is registered, a password reset link has been sent.',
+            genericError: 'Something went wrong.',
+            successReset: 'Your password has been reset successfully. Redirecting you to the login page...',
+        };
 
     const requestReset = async (data: ForgotPasswordDto) => {
         try {
             setLoading(true);
             setMessage(null);
-            await authAPI.forgotPassword(data);
-            setEmail(data.email);
-            setStep('reset');
-            setMessage({ type: 'success', text: 'Sıfırlama kodu email adresinize gönderildi.' });
+            const response = await authAPI.forgotPassword(data);
+            setMessage({
+                type: 'success',
+                text: response.message || copy.emailMessage
+            });
         } catch (err: unknown) {
-            setMessage({ type: 'error', text: extractApiErrorMessage(err, 'Bir hata oluştu.') });
+            setMessage({ type: 'error', text: extractApiErrorMessage(err, copy.genericError) });
         } finally {
             setLoading(false);
         }
     };
 
-    const confirmReset = async (data: Omit<ResetPasswordDto, 'email'>) => {
+    const confirmReset = async (data: ResetPasswordDto) => {
         try {
             setLoading(true);
             setMessage(null);
-            await authAPI.resetPassword({ ...data, email });
-            setMessage({ type: 'success', text: 'Şifreniz başarıyla sıfırlandı. Giriş sayfasına yönlendiriliyorsunuz...' });
+            const response = await authAPI.resetPassword(data);
+            setMessage({ type: 'success', text: response.message || copy.successReset });
             setTimeout(onSuccessReset, 3000);
         } catch (err: unknown) {
-            setMessage({ type: 'error', text: extractApiErrorMessage(err, 'Bir hata oluştu.') });
+            setMessage({ type: 'error', text: extractApiErrorMessage(err, copy.genericError) });
         } finally {
             setLoading(false);
         }
     };
 
-    return { step, loading, message, requestReset, confirmReset };
+    return { loading, message, requestReset, confirmReset };
 };

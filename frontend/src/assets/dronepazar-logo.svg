@@ -1,0 +1,59 @@
+<svg width="452" height="96" viewBox="0 0 452 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="brandGradient" x1="30" y1="18" x2="382" y2="87" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#88E7FF"/>
+      <stop offset="0.48" stop-color="#89B4FF"/>
+      <stop offset="1" stop-color="#C697FF"/>
+    </linearGradient>
+    <linearGradient id="bodyGradient" x1="63" y1="30" x2="102" y2="83" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A4DFFF"/>
+      <stop offset="1" stop-color="#A98BFF"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="78" cy="84" rx="25" ry="5.5" fill="url(#brandGradient)" opacity="0.45"/>
+  <path
+    d="M78 13C58.564 13 43 28.87 43 48.451c0 9.654 4.266 19.827 12.678 30.236 5.954 7.369 11.883 12.922 19.258 19.313a4.4 4.4 0 0 0 5.83 0c7.378-6.393 13.304-11.944 19.258-19.313C108.434 68.278 112.7 58.105 112.7 48.45 112.7 28.87 97.136 13 78 13Z"
+    stroke="url(#brandGradient)"
+    stroke-width="4.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <g stroke="url(#brandGradient)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M58.5 41.6 44.8 28.8"/>
+    <path d="M97.5 41.6 111.2 28.8"/>
+    <path d="M58.5 58.7 44.8 71.5"/>
+    <path d="M97.5 58.7 111.2 71.5"/>
+    <path d="M77.8 67.8v9.4"/>
+  </g>
+  <g stroke="url(#brandGradient)" stroke-width="3.2" stroke-linecap="round" fill="none">
+    <path d="M47.8 29.2a9 9 0 1 0 10.6 10.6"/>
+    <path d="M108.2 29.2a9 9 0 1 1-10.6 10.6"/>
+    <path d="M47.8 71.1a9 9 0 1 1 10.6-10.6"/>
+    <path d="M108.2 71.1a9 9 0 1 0-10.6-10.6"/>
+  </g>
+  <circle cx="44.8" cy="28.8" r="2.8" fill="url(#brandGradient)"/>
+  <circle cx="111.2" cy="28.8" r="2.8" fill="url(#brandGradient)"/>
+  <circle cx="44.8" cy="71.5" r="2.8" fill="url(#brandGradient)"/>
+  <circle cx="111.2" cy="71.5" r="2.8" fill="url(#brandGradient)"/>
+  <g fill="url(#bodyGradient)" stroke="#17172E" stroke-opacity="0.35" stroke-width="0.8">
+    <path d="M78 31.7c-5.4 0-9.8 5.23-9.8 11.67v12.95C68.2 62.77 72.6 68 78 68s9.8-5.23 9.8-11.67V43.37C87.8 36.93 83.4 31.7 78 31.7Z"/>
+    <path d="M69.7 41.5c-6.14-3.52-13.7-7.18-17.17-8.74.85 4.62 3.55 13.66 6.1 17.62 1.42 2.2 4.7 2.38 6.39.37L69.7 45.1a3 3 0 0 0 0-3.6Z"/>
+    <path d="M86.3 41.5c6.14-3.52 13.7-7.18 17.17-8.74-.85 4.62-3.55 13.66-6.1 17.62-1.42 2.2-4.7 2.38-6.39.37L86.3 45.1a3 3 0 0 1 0-3.6Z"/>
+    <path d="M69.7 58.8c-6.14 3.52-13.7 7.18-17.17 8.74.85-4.62 3.55-13.66 6.1-17.62 1.42-2.2 4.7-2.38 6.39-.37l4.68 5.7a3 3 0 0 1 0 3.77Z"/>
+    <path d="M86.3 58.8c6.14 3.52 13.7 7.18 17.17 8.74-.85-4.62-3.55-13.66-6.1-17.62-1.42-2.2-4.7-2.38-6.39-.37l-4.68 5.7a3 3 0 0 0 0 3.77Z"/>
+    <circle cx="78" cy="48.7" r="3.2" fill="#17172E"/>
+    <rect x="72.7" y="65.8" width="10.6" height="9.4" rx="3.5"/>
+    <circle cx="78" cy="70.5" r="2.1" fill="#17172E"/>
+  </g>
+  <text
+    x="138"
+    y="66"
+    fill="url(#brandGradient)"
+    font-family="Segoe UI, Arial, sans-serif"
+    font-size="54"
+    font-weight="700"
+    letter-spacing="-1.4"
+  >
+    DronePazar
+  </text>
+</svg>

@@ -1,0 +1,76 @@
+services:
+  db:
+    build:
+      context: .
+      dockerfile: infra/docker/postgres/Dockerfile
+    platform: linux/amd64
+    container_name: drone-market-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-DroneMarketDB_Dev}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-DroneMarketDB_Dev}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/DroneMarketplace/DroneMarketplace.API/Dockerfile
+    platform: linux/amd64
+    container_name: drone-market-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=${POSTGRES_DB:-DroneMarketDB_Dev};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
+      JwtSettings__Secret: ${JWT_SECRET:-dev-local-jwt-secret-2026-03-31-minimum-32-bytes-ok}
+      JwtSettings__Issuer: ${JWT_ISSUER:-DroneMarketAPI}
+      JwtSettings__Audience: ${JWT_AUDIENCE:-DroneMarketFrontend}
+      AllowedOrigins__0: ${ALLOWED_ORIGIN_0:-http://localhost}
+      AllowedOrigins__1: ${ALLOWED_ORIGIN_1:-http://localhost:80}
+      AllowedOrigins__2: ${ALLOWED_ORIGIN_2:-http://localhost:8080}
+      FrontendBaseUrl: ${FRONTEND_BASE_URL:-http://localhost}
+      ContactSettings__RecipientEmail: ${CONTACT_RECIPIENT_EMAIL:-info@dronepazar.com}
+      ContactSettings__SenderEmail: ${CONTACT_SENDER_EMAIL:-info@dronepazar.com}
+      ContactSettings__SenderName: ${CONTACT_SENDER_NAME:-DronePazar Iletisim}
+      DataProtection__KeyPath: /app/data-protection-keys
+      StartupTasks__RunMigrationsOnStartup: "${RUN_MIGRATIONS_ON_STARTUP:-true}"
+      StartupTasks__RunSeedOnStartup: "${RUN_SEED_ON_STARTUP:-true}"
+      Features__EnablePasswordReset: "${ENABLE_PASSWORD_RESET:-true}"
+      AdminSettings__Email: ${ADMIN_EMAIL:-admin@drone.com}
+      AdminSettings__Password: ${ADMIN_PASSWORD:-Admin+1234}
+      EmailSettings__Host: ${EMAIL_HOST:-}
+      EmailSettings__Port: "${EMAIL_PORT:-587}"
+      EmailSettings__Username: ${EMAIL_USERNAME:-}
+      EmailSettings__Password: ${EMAIL_PASSWORD:-}
+      EmailSettings__FromEmail: ${EMAIL_FROM_EMAIL:-auth@dronepazar.com}
+      EmailSettings__FromName: ${EMAIL_FROM_NAME:-DronePazar}
+      EmailSettings__EnableSsl: "${EMAIL_ENABLE_SSL:-true}"
+      EmailSettings__UseDefaultCredentials: "${EMAIL_USE_DEFAULT_CREDENTIALS:-false}"
+    ports:
+      - "5025:8080"
+    volumes:
+      - data_protection_keys:/app/data-protection-keys
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    platform: linux/amd64
+    container_name: drone-market-frontend
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+volumes:
+  postgres_data:
+  data_protection_keys:

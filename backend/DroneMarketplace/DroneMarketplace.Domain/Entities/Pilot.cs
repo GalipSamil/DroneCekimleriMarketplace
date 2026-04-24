@@ -10,6 +10,7 @@ namespace DroneMarketplace.Domain.Entities
         public string? SHGMLicenseNumber { get; private set; }
         public string? Bio { get; private set; }
         public string? EquipmentList { get; private set; }
+        public string? VerificationRejectionReason { get; private set; }
 
         public bool IsVerified { get; private set; } = false;
 
@@ -44,13 +45,17 @@ namespace DroneMarketplace.Domain.Entities
         /// </summary>
         public void UpdateProfile(string? bio, string? equipmentList, string? shgmLicenseNumber, Point? location)
         {
+            var previousLicenseNumber = NormalizeLicenseNumber(SHGMLicenseNumber);
+            var nextLicenseNumber = NormalizeLicenseNumber(shgmLicenseNumber);
+
             Bio = bio;
             EquipmentList = equipmentList;
-            SHGMLicenseNumber = shgmLicenseNumber;
+            SHGMLicenseNumber = nextLicenseNumber;
             Location = location;
+            VerificationRejectionReason = null;
 
-            // If a pilot clears their license number, they lose verification
-            if (string.IsNullOrWhiteSpace(shgmLicenseNumber) && IsVerified)
+            // Verified pilots must be reviewed again if their license changes or is cleared.
+            if (IsVerified && !string.Equals(previousLicenseNumber, nextLicenseNumber, StringComparison.OrdinalIgnoreCase))
             {
                 IsVerified = false;
             }
@@ -67,6 +72,7 @@ namespace DroneMarketplace.Domain.Entities
                 throw new InvalidOperationException("Pilot onaylanabilmesi için geçerli bir SHGM lisans numarası girilmiş olmalıdır.");
 
             IsVerified = true;
+            VerificationRejectionReason = null;
             Touch();
         }
 
@@ -79,7 +85,15 @@ namespace DroneMarketplace.Domain.Entities
                 throw new ArgumentException("Doğrulama iptal sebebi boş bırakılamaz.");
 
             IsVerified = false;
+            VerificationRejectionReason = reason.Trim();
             Touch();
+        }
+
+        private static string? NormalizeLicenseNumber(string? shgmLicenseNumber)
+        {
+            return string.IsNullOrWhiteSpace(shgmLicenseNumber)
+                ? null
+                : shgmLicenseNumber.Trim();
         }
     }
 }

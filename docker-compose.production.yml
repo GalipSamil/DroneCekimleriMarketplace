@@ -1,0 +1,93 @@
+services:
+  db:
+    build:
+      context: .
+      dockerfile: infra/docker/postgres/Dockerfile
+    container_name: drone-market-db-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/DroneMarketplace/DroneMarketplace.API/Dockerfile
+    container_name: drone-market-api-prod
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};SSL Mode=Disable
+      JwtSettings__Secret: ${JWT_SECRET}
+      JwtSettings__Issuer: ${JWT_ISSUER}
+      JwtSettings__Audience: ${JWT_AUDIENCE}
+      AllowedOrigins__0: https://${DOMAIN}
+      AllowedOrigins__1: https://www.${DOMAIN}
+      FrontendBaseUrl: https://${DOMAIN}
+      ContactSettings__RecipientEmail: ${CONTACT_RECIPIENT_EMAIL}
+      ContactSettings__SenderEmail: ${CONTACT_SENDER_EMAIL}
+      ContactSettings__SenderName: ${CONTACT_SENDER_NAME}
+      DataProtection__KeyPath: /app/data-protection-keys
+      StartupTasks__RunMigrationsOnStartup: "${RUN_MIGRATIONS_ON_STARTUP}"
+      StartupTasks__RunSeedOnStartup: "${RUN_SEED_ON_STARTUP}"
+      Features__EnablePasswordReset: "${ENABLE_PASSWORD_RESET}"
+      Features__EnableSwagger: "${ENABLE_SWAGGER}"
+      AdminSettings__Email: ${ADMIN_EMAIL}
+      AdminSettings__Password: ${ADMIN_PASSWORD}
+      EmailSettings__Host: ${EMAIL_HOST}
+      EmailSettings__Port: "${EMAIL_PORT}"
+      EmailSettings__Username: ${EMAIL_USERNAME}
+      EmailSettings__Password: ${EMAIL_PASSWORD}
+      EmailSettings__FromEmail: ${EMAIL_FROM_EMAIL}
+      EmailSettings__FromName: ${EMAIL_FROM_NAME}
+      EmailSettings__EnableSsl: "${EMAIL_ENABLE_SSL}"
+      EmailSettings__UseDefaultCredentials: "${EMAIL_USE_DEFAULT_CREDENTIALS}"
+    volumes:
+      - data_protection_keys_prod:/app/data-protection-keys
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_ENABLE_PASSWORD_RESET: ${VITE_ENABLE_PASSWORD_RESET}
+        VITE_GA_MEASUREMENT_ID: ${VITE_GA_MEASUREMENT_ID}
+    container_name: drone-market-frontend-prod
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  edge:
+    image: caddy:2.8-alpine
+    container_name: drone-market-edge-prod
+    restart: unless-stopped
+    depends_on:
+      - frontend
+    environment:
+      DOMAIN: ${DOMAIN}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/docker/caddy/Caddyfile.production:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  postgres_data_prod:
+  data_protection_keys_prod:
+  caddy_data:
+  caddy_config:

@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, type ReactNode } from 'react';
+import { getAuthFlagsFromToken } from '../utils/authToken';
 
 interface AuthContextType {
     userId: string | null;
@@ -7,38 +8,40 @@ interface AuthContextType {
     isAdmin: boolean;
     token: string | null;
     isAuthenticated: boolean;
-    login: (userId: string, isPilot: boolean, token: string, email?: string) => void;
+    login: (userId: string, token: string) => void;
     logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
+    const storedToken = localStorage.getItem('token');
+    const storedAuthFlags = getAuthFlagsFromToken(storedToken);
+
     const [userId, setUserId] = useState<string | null>(
         localStorage.getItem('userId')
     );
     const [isPilot, setIsPilot] = useState<boolean>(
-        localStorage.getItem('isPilot') === 'true'
+        storedAuthFlags.isPilot
     );
     const [isAdmin, setIsAdmin] = useState<boolean>(
-        localStorage.getItem('isAdmin') === 'true'
+        storedAuthFlags.isAdmin
     );
     const [token, setToken] = useState<string | null>(
-        localStorage.getItem('token')
+        storedToken
     );
 
-    const login = (id: string, pilot: boolean, accessToken: string, email?: string) => {
-        const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
-        const adminStatus = adminEmail ? email === adminEmail : false;
-        
+    const login = (id: string, accessToken: string) => {
+        const authFlags = getAuthFlagsFromToken(accessToken);
+
         setUserId(id);
-        setIsPilot(pilot);
-        setIsAdmin(adminStatus);
+        setIsPilot(authFlags.isPilot);
+        setIsAdmin(authFlags.isAdmin);
         setToken(accessToken);
         
         localStorage.setItem('userId', id);
-        localStorage.setItem('isPilot', pilot.toString());
-        localStorage.setItem('isAdmin', adminStatus.toString());
+        localStorage.setItem('isPilot', authFlags.isPilot.toString());
+        localStorage.setItem('isAdmin', authFlags.isAdmin.toString());
         localStorage.setItem('token', accessToken);
     };
 

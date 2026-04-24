@@ -23,8 +23,8 @@ namespace DroneMarketplace.Domain.Entities
         public BookingStatus Status { get; private set; }
         public DateTime BookingDate { get; private set; }
         
-        public string? CustomerNotes { get; private set; }
-        public string? PilotNotes { get; private set; }
+        public string CustomerNotes { get; private set; } = string.Empty;
+        public string PilotNotes { get; private set; } = string.Empty;
         
         public Review? Review { get; private set; }
 
@@ -60,7 +60,8 @@ namespace DroneMarketplace.Domain.Entities
                 Longitude = longitude,
                 Hours = hours,
                 Days = days,
-                CustomerNotes = customerNotes,
+                CustomerNotes = customerNotes ?? string.Empty,
+                PilotNotes = string.Empty,
                 Status = BookingStatus.Pending,
                 BookingDate = DateTime.UtcNow
             };

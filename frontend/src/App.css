@@ -92,8 +92,17 @@
   min-height: 100vh;
 }
 
+.dashboard-app-shell {
+  background: var(--dashboard-shell-bg);
+}
+
 .main-content {
   flex: 1;
+}
+
+body.dashboard-body::before,
+body.dashboard-body::after {
+  content: none;
 }
 
 .container {
@@ -126,20 +135,20 @@ body::after {
   width: 500px;
   height: 500px;
   border-radius: 50%;
-  filter: blur(100px);
+  filter: blur(120px);
   z-index: -1;
-  opacity: 0.4;
+  opacity: 0.12;
   animation: float 20s infinite alternate;
 }
 
 body::before {
-  background: var(--color-accent);
+  background: var(--ambient-a);
   top: -100px;
   left: -100px;
 }
 
 body::after {
-  background: #667eea;
+  background: var(--ambient-b);
   bottom: -100px;
   right: -100px;
   animation-delay: -10s;
@@ -157,21 +166,23 @@ body::after {
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 10px;
+  width: 12px;
+  height: 12px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-primary);
+  background: var(--scrollbar-track);
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-secondary);
-  border-radius: 5px;
-  border: 2px solid var(--color-primary);
+  background: var(--scrollbar-thumb);
+  border-radius: 9999px;
+  border: 2px solid var(--scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-accent);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Buttons */

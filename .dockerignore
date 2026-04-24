@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/.vs/
+**/.vscode/
+**/*.user
+**/*.suo
+**/*.log
+.env
+.env.*
+**/.env
+**/.env.*
+git/
+.git/

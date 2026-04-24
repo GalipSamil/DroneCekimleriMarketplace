@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { X, Send, Calendar, MapPin, Briefcase, DollarSign } from 'lucide-react';
 import { ServiceCategory } from '../../types';
+import { usePreferences } from '../../context/preferences';
+import { customRequestAPI, extractApiErrorMessage } from '../../services/api';
+import { getServiceCategoryLabel } from '../../utils/serviceCategory';
 
 interface CustomRequestModalProps {
     isOpen: boolean;
@@ -9,24 +12,13 @@ interface CustomRequestModalProps {
     prefillLocation?: string;
 }
 
-const CATEGORY_NAMES: Record<ServiceCategory, string> = {
-    [ServiceCategory.RealEstate]: 'Emlak',
-    [ServiceCategory.Wedding]: 'Düğün',
-    [ServiceCategory.Inspection]: 'İnceleme',
-    [ServiceCategory.Commercial]: 'Ticari',
-    [ServiceCategory.Mapping]: 'Haritacılık',
-    [ServiceCategory.Agriculture]: 'Tarım',
-    [ServiceCategory.Construction]: 'İnşaat',
-    [ServiceCategory.Events]: 'Etkinlik',
-    [ServiceCategory.Cinematography]: 'Sinematografi',
-};
-
 export const CustomRequestModal: React.FC<CustomRequestModalProps> = ({ 
     isOpen, 
     onClose,
     prefillCategory,
     prefillLocation
 }) => {
+    const { language } = usePreferences();
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         category: prefillCategory ?? '',
@@ -36,6 +28,43 @@ export const CustomRequestModal: React.FC<CustomRequestModalProps> = ({
         details: '',
         contactPhone: ''
     });
+    const copy = language === 'tr'
+        ? {
+            success: 'Özel çekim talebiniz başarıyla alındı! Ekibimiz 24 saat içinde size ulaşıp en uygun pilotu yönlendirecektir.',
+            error: 'Talebiniz gönderilirken bir hata oluştu. Lütfen tekrar deneyin.',
+            title: 'Özel Talep Oluştur',
+            description: 'Size uygun pilot yoksa bile sorun değil. Talebinizi bırakın, en uygun pilotu 24 saat içinde biz ayarlayalım.',
+            category: 'Kategori',
+            select: 'Seçiniz...',
+            location: 'Konum (İl / İlçe)',
+            locationPlaceholder: 'Örn: Kadıköy, İstanbul',
+            date: 'Tahmini Tarih',
+            phone: 'İletişim Numarası',
+            phonePlaceholder: '05XX XXX XX XX',
+            details: 'Proje Detayları ve İhtiyaçlarınız',
+            detailsPlaceholder: 'Nasıl bir çekim yapılacak? Özel ekipman beklentiniz var mı? Detaylı şekilde anlatın...',
+            cancel: 'İptal',
+            sending: 'Gönderiliyor...',
+            submit: 'Gönder',
+        }
+        : {
+            success: 'Your custom shoot request has been received. Our team will contact you within 24 hours and match you with the best pilot.',
+            error: 'An error occurred while sending your request. Please try again.',
+            title: 'Create Custom Request',
+            description: 'No suitable pilot yet? Leave your request and we will match the best pilot for you within 24 hours.',
+            category: 'Category',
+            select: 'Select...',
+            location: 'Location (City / District)',
+            locationPlaceholder: 'Example: Kadikoy, Istanbul',
+            date: 'Estimated Date',
+            phone: 'Contact Number',
+            phonePlaceholder: '+90 5XX XXX XX XX',
+            details: 'Project Details and Requirements',
+            detailsPlaceholder: 'What kind of shoot do you need? Any special equipment expectations? Describe it in detail...',
+            cancel: 'Cancel',
+            sending: 'Sending...',
+            submit: 'Send',
+        };
 
     if (!isOpen) return null;
 
@@ -43,15 +72,21 @@ export const CustomRequestModal: React.FC<CustomRequestModalProps> = ({
         e.preventDefault();
         setLoading(true);
 
-        // Simulate API call for the Custom Request (Fake it till you make it)
         try {
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            alert('Özel çekim talebiniz başarıyla alındı! Ekibimiz 24 saat içinde size ulaşıp en uygun pilotu yönlendirecektir.');
+            await customRequestAPI.create({
+                category: Number(formData.category) as ServiceCategory,
+                location: formData.location,
+                date: formData.date,
+                budget: formData.budget || undefined,
+                details: formData.details,
+                contactPhone: formData.contactPhone,
+            });
+            alert(copy.success);
             onClose();
             setFormData({ category: '', location: '', date: '', budget: '', details: '', contactPhone: ''});
         } catch (error) {
             console.error('Error submitting request:', error);
-            alert('Talebiniz gönderilirken bir hata oluştu. Lütfen tekrar deneyin.');
+            alert(extractApiErrorMessage(error, copy.error));
         } finally {
             setLoading(false);
         }
@@ -68,10 +103,10 @@ export const CustomRequestModal: React.FC<CustomRequestModalProps> = ({
                             <span className="p-2 bg-blue-500/10 rounded-xl border border-blue-500/20">
                                 <Send className="text-blue-400" size={24} />
                             </span>
-                            Özel Talep Oluştur
+                            {copy.title}
                         </h2>
                         <p className="text-slate-400 text-sm mt-2 ml-14">
-                            Size uygun pilot yoksa bile sorun değil. Talebinizi bırakın, en uygun pilotu 24 saat içinde biz ayarlayalım.
+                            {copy.description}
                         </p>
                     </div>
                     <button
@@ -83,12 +118,12 @@ export const CustomRequestModal: React.FC<CustomRequestModalProps> = ({
                 </div>
 
                 <div className="p-8">
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <form onSubmit={handleSubmit} className="space-y-7">
+                        <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
                             {/* Category */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-slate-300 ml-1 flex items-center gap-2">
-                                    <Briefcase size={16} className="text-slate-500" /> Kategori
+                            <div className="flex flex-col gap-2">
+                                <label className="ml-1 flex items-center gap-2 text-sm font-semibold text-slate-300">
+                                    <Briefcase size={16} className="text-slate-500" /> {copy.category}
                                 </label>
                                 <select
                                     required
@@ -96,22 +131,24 @@ export const CustomRequestModal: React.FC<CustomRequestModalProps> = ({
                                     value={formData.category}
                                     onChange={e => setFormData({ ...formData, category: e.target.value })}
                                 >
-                                    <option value="" disabled>Seçiniz...</option>
-                                    {Object.entries(CATEGORY_NAMES).map(([val, label]) => (
-                                        <option key={val} value={val}>{label}</option>
-                                    ))}
+                                    <option value="" disabled>{copy.select}</option>
+                                    {Object.values(ServiceCategory)
+                                        .filter((value): value is ServiceCategory => typeof value === 'number')
+                                        .map((value) => (
+                                            <option key={value} value={value}>{getServiceCategoryLabel(value, language)}</option>
+                                        ))}
                                 </select>
                             </div>
 
                             {/* Location */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-slate-300 ml-1 flex items-center gap-2">
-                                    <MapPin size={16} className="text-slate-500" /> Konum (İl / İlçe)
+                            <div className="flex flex-col gap-2">
+                                <label className="ml-1 flex items-center gap-2 text-sm font-semibold text-slate-300">
+                                    <MapPin size={16} className="text-slate-500" /> {copy.location}
                                 </label>
                                 <input
                                     required
                                     type="text"
-                                    placeholder="Örn: Kadıköy, İstanbul"
+                                    placeholder={copy.locationPlaceholder}
                                     className="w-full bg-slate-800/40 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all font-medium hover:bg-slate-800/60"
                                     value={formData.location}
                                     onChange={e => setFormData({ ...formData, location: e.target.value })}
@@ -119,9 +156,9 @@ export const CustomRequestModal: React.FC<CustomRequestModalProps> = ({
                             </div>
 
                             {/* Date */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-slate-300 ml-1 flex items-center gap-2">
-                                    <Calendar size={16} className="text-slate-500" /> Tahmini Tarih
+                            <div className="flex flex-col gap-2 mt-6 md:mt-4">
+                                <label className="ml-1 flex items-center gap-2 text-sm font-semibold text-slate-300">
+                                    <Calendar size={16} className="text-slate-500" /> {copy.date}
                                 </label>
                                 <input
                                     required
@@ -134,14 +171,14 @@ export const CustomRequestModal: React.FC<CustomRequestModalProps> = ({
                             </div>
 
                             {/* Contact Phone */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-slate-300 ml-1 flex items-center gap-2">
-                                    <DollarSign size={16} className="text-slate-500 opacity-0" /> İletişim Numarası
+                            <div className="flex flex-col gap-2 mt-6 md:mt-4">
+                                <label className="ml-1 flex items-center gap-2 text-sm font-semibold text-slate-300">
+                                    <DollarSign size={16} className="text-slate-500 opacity-0" /> {copy.phone}
                                 </label>
                                 <input
                                     required
                                     type="tel"
-                                    placeholder="05XX XXX XX XX"
+                                    placeholder={copy.phonePlaceholder}
                                     className="w-full bg-slate-800/40 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all font-medium hover:bg-slate-800/60"
                                     value={formData.contactPhone}
                                     onChange={e => setFormData({ ...formData, contactPhone: e.target.value })}
@@ -150,13 +187,13 @@ export const CustomRequestModal: React.FC<CustomRequestModalProps> = ({
                         </div>
 
                         {/* Details */}
-                        <div className="space-y-2">
-                            <label className="text-sm font-semibold text-slate-300 ml-1">Proje Detayları ve İhtiyaçlarınız</label>
+                        <div className="space-y-3">
+                            <label className="ml-1 block text-sm font-semibold text-slate-300">{copy.details}</label>
                             <textarea
                                 required
                                 rows={4}
-                                placeholder="Nasıl bir çekim yapılacak? Özel ekipman beklentiniz var mı? Detaylı şekilde anlatın..."
-                                className="w-full bg-slate-800/40 border border-slate-700/80 rounded-xl px-4 py-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all font-medium hover:bg-slate-800/60 resize-none"
+                                placeholder={copy.detailsPlaceholder}
+                                className="block w-full bg-slate-800/40 border border-slate-700/80 rounded-xl px-4 py-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all font-medium hover:bg-slate-800/60 resize-none"
                                 value={formData.details}
                                 onChange={e => setFormData({ ...formData, details: e.target.value })}
                             />
@@ -169,7 +206,7 @@ export const CustomRequestModal: React.FC<CustomRequestModalProps> = ({
                                 onClick={onClose}
                                 className="flex-1 py-4 font-bold bg-slate-800 hover:bg-slate-700 text-white rounded-xl transition-colors border border-slate-700"
                             >
-                                İptal
+                                {copy.cancel}
                             </button>
                             <button
                                 type="submit"
@@ -181,10 +218,10 @@ export const CustomRequestModal: React.FC<CustomRequestModalProps> = ({
                                     {loading ? (
                                         <>
                                             <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                            Gönderiliyor...
+                                            {copy.sending}
                                         </>
                                     ) : (
-                                        <>Gönder <Send size={18} className="group-hover:translate-x-1 group-hover:-translate-y-0.5 transition-transform" /></>
+                                        <>{copy.submit} <Send size={18} className="group-hover:translate-x-1 group-hover:-translate-y-0.5 transition-transform" /></>
                                     )}
                                 </span>
                             </button>

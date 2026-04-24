@@ -1,17 +1,17 @@
 import React from 'react';
+import { usePreferences } from '../../context/preferences';
 
 interface AuthLayoutProps {
     children: React.ReactNode;
 }
 
 export const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
-    return (
-        <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4 relative overflow-hidden">
-            {/* Ambient Base Backgrounds */}
-            <div className="absolute top-[-10%] left-[-5%] w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[120px] -z-10 animate-pulse-slow"></div>
-            <div className="absolute bottom-[-10%] right-[-5%] w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[120px] -z-10 animate-pulse-slow delay-1000"></div>
+    const { theme } = usePreferences();
+    const isLight = theme === 'light';
 
-            <div className="w-full max-w-md z-10">
+    return (
+        <div className={`min-h-screen flex items-center justify-center p-4 ${isLight ? 'bg-slate-50' : 'bg-[#020617]'}`}>
+            <div className="w-full max-w-md">
                 {children}
             </div>
         </div>

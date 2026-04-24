@@ -1,45 +1,72 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { MapPin, ArrowRight, CheckCircle, Star } from 'lucide-react';
 import type { Listing } from '../../types';
-import { ServiceCategory } from '../../types';
-
-const CATEGORY_NAMES: Record<ServiceCategory, string> = {
-    [ServiceCategory.RealEstate]: 'Emlak',
-    [ServiceCategory.Wedding]: 'Düğün',
-    [ServiceCategory.Inspection]: 'İnceleme',
-    [ServiceCategory.Commercial]: 'Ticari',
-    [ServiceCategory.Mapping]: 'Haritacılık',
-    [ServiceCategory.Agriculture]: 'Tarım',
-    [ServiceCategory.Construction]: 'İnşaat',
-    [ServiceCategory.Events]: 'Etkinlik',
-    [ServiceCategory.Cinematography]: 'Sinematografi',
-};
-
-const fmt = (n: number) =>
-    new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(n);
+import { usePreferences } from '../../context/preferences';
+import { formatTryCurrency, getServiceCategoryLabel } from '../../utils/serviceCategory';
+import { buildPilotProfilePath, buildServicePath } from '../../utils/seoPaths';
 
 interface ServiceCardProps {
     service: Listing;
 }
 
 export const ServiceCard: React.FC<ServiceCardProps> = ({ service }) => {
+    const navigate = useNavigate();
+    const { language, theme } = usePreferences();
+    const copy = language === 'tr'
+        ? {
+            inactive: 'Pasif',
+            verifiedPilot: 'Doğrulanmış Pilot',
+            hourly: 'Saatlik',
+            daily: 'Günlük',
+            pilotProfileAria: `${service.pilotName} profiline git`,
+        }
+        : {
+            inactive: 'Inactive',
+            verifiedPilot: 'Verified Pilot',
+            hourly: 'Hourly',
+            daily: 'Daily',
+            pilotProfileAria: `Go to ${service.pilotName} profile`,
+        };
+
+    const categoryBadgeClass = theme === 'light'
+        ? 'bg-white/92 border border-slate-200/90 text-slate-900 shadow-lg shadow-slate-300/20'
+        : 'bg-slate-950/72 backdrop-blur-sm border border-white/10 text-white';
+
+    const inactiveBadgeClass = theme === 'light'
+        ? 'bg-red-50/95 border border-red-200 text-red-700'
+        : 'bg-red-950/80 backdrop-blur-sm border border-red-500/30 text-red-300';
+
+    const openService = () => {
+        navigate(buildServicePath({ id: service.id, title: service.title }));
+    };
+
     return (
-        <Link
-            to={`/service/${service.id}`}
+        <article
             className={[
-                'group block rounded-3xl border overflow-hidden',
-                'bg-slate-900/80 backdrop-blur-sm',
+                'group block rounded-2xl border overflow-hidden',
+                'bg-slate-900/80',
                 'border-slate-800/80',
-                // Hover: lift + border color + shadow
-                'transition-all duration-300 ease-out',
-                'hover:-translate-y-1.5 hover:border-blue-500/30 hover:shadow-xl hover:shadow-blue-500/8',
+                // Hover: lift + border color
+                'transition-all duration-200 ease-out',
+                'hover:-translate-y-1 hover:border-slate-700/80',
                 // Focus
                 'focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
                 // Entrance
                 'animate-fade-in-up',
-                // GPU hint
-                'will-change-transform',
             ].join(' ')}
+            role="link"
+            tabIndex={0}
+            onClick={openService}
+            onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) {
+                    return;
+                }
+
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    openService();
+                }
+            }}
         >
             {/* Cover Image */}
             <div className="relative h-52 overflow-hidden bg-slate-800/50">
@@ -59,14 +86,14 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service }) => {
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
 
                 {/* Category badge */}
-                <span className="absolute top-3 left-3 px-3 py-1 rounded-full bg-slate-950/70 backdrop-blur-sm border border-white/10 text-xs font-bold text-white tracking-wide">
-                    {CATEGORY_NAMES[service.category] ?? 'Diğer'}
+                <span className={`absolute top-3 left-3 px-3 py-1 rounded-full text-xs font-bold tracking-wide ${categoryBadgeClass}`}>
+                    {getServiceCategoryLabel(service.category, language)}
                 </span>
 
                 {/* Inactive badge */}
                 {!service.isActive && (
-                    <span className="absolute top-3 right-3 px-3 py-1 rounded-full bg-red-950/80 backdrop-blur-sm border border-red-500/30 text-xs font-bold text-red-300">
-                        Pasif
+                    <span className={`absolute top-3 right-3 px-3 py-1 rounded-full text-xs font-bold ${inactiveBadgeClass}`}>
+                        {copy.inactive}
                     </span>
                 )}
             </div>
@@ -75,7 +102,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service }) => {
             <div className="p-5 flex flex-col gap-4">
                 {/* Title & Description */}
                 <div>
-                    <h3 className="text-base font-bold text-slate-100 line-clamp-1 mb-1 transition-colors duration-200 group-hover:text-blue-400">
+                    <h3 className="text-base font-bold text-slate-100 line-clamp-1 mb-1 transition-colors duration-200 group-hover:text-blue-500">
                         {service.title}
                     </h3>
                     <p className="text-slate-500 text-sm line-clamp-2 leading-relaxed">
@@ -85,18 +112,23 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service }) => {
 
                 {/* Pilot Row */}
                 <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shrink-0 border border-white/10">
+                    <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-xs font-bold text-white shrink-0 border border-white/10">
                         {service.pilotName.substring(0, 2).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-slate-200 truncate flex items-center gap-1">
-                            {service.pilotName}
+                        <Link
+                            to={buildPilotProfilePath({ userId: service.pilotUserId, fullName: service.pilotName })}
+                            aria-label={copy.pilotProfileAria}
+                            className="inline-flex max-w-full items-center gap-1 truncate text-sm font-semibold text-slate-200 transition-colors hover:text-blue-500"
+                            onClick={(event) => event.stopPropagation()}
+                        >
+                            <span className="truncate">{service.pilotName}</span>
                             {service.pilotIsVerified && (
-                                <span title="Doğrulanmış Pilot">
-                                    <CheckCircle size={12} className="text-blue-400 shrink-0" />
+                                <span title={copy.verifiedPilot}>
+                                    <CheckCircle size={12} className="text-blue-500 shrink-0" />
                                 </span>
                             )}
-                        </p>
+                        </Link>
                         <div className="flex items-center gap-2 mt-0.5">
                             {service.averageRating > 0 ? (
                                 <span className="flex items-center gap-1 text-amber-400 text-xs font-semibold">
@@ -124,12 +156,12 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service }) => {
                 <div className="flex items-center justify-between pt-3 border-t border-slate-800/60">
                     <div className="flex gap-4">
                         <div>
-                            <p className="text-[10px] text-slate-600 uppercase tracking-widest font-semibold">Saatlik</p>
-                            <p className="text-sm font-bold text-slate-100">{fmt(service.hourlyRate)}</p>
+                            <p className="text-[10px] text-slate-600 uppercase tracking-widest font-semibold">{copy.hourly}</p>
+                            <p className="text-sm font-bold text-slate-100">{formatTryCurrency(service.hourlyRate, language)}</p>
                         </div>
                         <div>
-                            <p className="text-[10px] text-slate-600 uppercase tracking-widest font-semibold">Günlük</p>
-                            <p className="text-sm font-bold text-slate-100">{fmt(service.dailyRate)}</p>
+                            <p className="text-[10px] text-slate-600 uppercase tracking-widest font-semibold">{copy.daily}</p>
+                            <p className="text-sm font-bold text-slate-100">{formatTryCurrency(service.dailyRate, language)}</p>
                         </div>
                     </div>
 
@@ -142,6 +174,6 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service }) => {
                     </div>
                 </div>
             </div>
-        </Link>
+        </article>
     );
 };

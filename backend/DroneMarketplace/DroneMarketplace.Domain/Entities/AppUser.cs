@@ -32,9 +32,9 @@ namespace DroneMarketplace.Domain.Entities
             };
         }
 
-        public void UpdateProfilePicture(string url)
+        public void UpdateProfilePicture(string? url)
         {
-            ProfilePictureUrl = url;
+            ProfilePictureUrl = string.IsNullOrWhiteSpace(url) ? null : url.Trim();
         }
     }
 }
